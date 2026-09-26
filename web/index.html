@@ -221,19 +221,42 @@
     sfx.play('click');
   }
 
-  // --- Online leaderboard ---------------------------------------------------
-  // One document per player, scores/<user id> = {score, level, at}; names are
-  // resolved from the id at render time, never stored.
+  // --- Leaderboard ----------------------------------------------------------
+  // Online on claude.ai: one document per player, scores/<user id> =
+  // {score, level, at}; names are resolved from the id at render time, never
+  // stored. Anywhere else (e.g. GitHub Pages) it falls back to a local top 10
+  // in localStorage, like the Godot version.
+  const LOCAL_KEY = 'color-spin-top';
   const board = {
-    status: 'loading', // loading | ready | offline
-    rows: [],          // [{id, score, level}] sorted, top TOP_SIZE
+    status: 'loading', // loading | ready (online) | local
+    rows: [],          // [{id, score, level, date?}] sorted, top TOP_SIZE
     names: {},
     myId: null, myBest: 0, db: null, user: null, writing: Promise.resolve(),
+    localHighlight: -1, // row of the last local game, -1 = none
   };
+  function useLocalBoard() {
+    board.status = 'local';
+    try { board.rows = JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch { board.rows = []; }
+  }
+  // Inserts this game into the local top list; returns its rank (0 = not ranked).
+  function recordLocal(s, lvl) {
+    board.localHighlight = -1;
+    if (s <= 0) return 0;
+    let i = 0;
+    while (i < board.rows.length && board.rows[i].score >= s) i++;
+    if (i >= TOP_SIZE) return 0;
+    const d = new Date(), pad = n => String(n).padStart(2, '0');
+    board.rows.splice(i, 0, { id: `local-${Date.now()}`, score: s, level: lvl,
+      date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` });
+    board.rows.length = Math.min(board.rows.length, TOP_SIZE);
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(board.rows)); } catch {}
+    board.localHighlight = i;
+    return i + 1;
+  }
   async function initBoard() {
     const cl = window.claude;
     const [db, user] = cl && cl.use ? await Promise.all([cl.use('db'), cl.use('user')]) : [null, null];
-    if (!db) { board.status = 'offline'; return; }
+    if (!db) { useLocalBoard(); return; }
     board.db = db; board.user = user;
     board.myId = user ? await user.id() : null;
     if (board.myId) {
@@ -246,7 +269,7 @@
       board.rows = snap.docs.map(d => ({ id: d.id, score: Number(d.data().score) || 0, level: Number(d.data().level) || 1 }));
       board.status = 'ready';
       refreshNames();
-    }, () => { board.status = 'offline'; });
+    }, () => { if (board.status === 'loading') useLocalBoard(); });
   }
   async function refreshNames() {
     if (!board.user || !board.rows.length) return;
@@ -412,9 +435,13 @@
     for (const b of balls) b.dead = true;
     for (const c of shape.colors) burst(0, 0, c, 10, 450);
     if (score > best) { best = score; newBest = true; saveBest(); }
-    lastGameImproved = board.myId !== null && score > board.myBest;
-    lastRank = lastGameImproved ? onlineRank(score) : 0;
-    submitScore(score, level);
+    if (board.status === 'local') {
+      lastRank = recordLocal(score, level);
+    } else {
+      lastGameImproved = board.myId !== null && score > board.myBest;
+      lastRank = lastGameImproved ? onlineRank(score) : 0;
+      submitScore(score, level);
+    }
   }
 
   // --- Input ----------------------------------------------------------------
@@ -662,22 +689,21 @@
   function drawLeaderboard() {
     ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
     centered('CLASSIFICA', H * 0.1, 60, WHITE);
-    centered('I 10 migliori giocatori', H * 0.1 + 40, 20, WHITE, 0.5);
+    const local = board.status === 'local';
+    centered(local ? 'I 10 migliori punteggi su questo dispositivo' : 'I 10 migliori giocatori',
+      H * 0.1 + 40, 20, WHITE, 0.5);
     if (board.status === 'loading') centered('Caricamento…', H * 0.4, 24, WHITE, 0.6);
-    else if (board.status === 'offline') {
-      centered('Classifica online non disponibile', H * 0.4, 24, WHITE, 0.6);
-      centered('Apri il gioco su claude.ai per vederla', H * 0.4 + 36, 20, WHITE, 0.45);
-    } else if (!board.rows.length) centered('Ancora nessun punteggio: gioca una partita!', H * 0.4, 24, WHITE, 0.6);
+    else if (!board.rows.length) centered('Ancora nessun punteggio: gioca una partita!', H * 0.4, 24, WHITE, 0.6);
     const y0 = H * 0.17, w = W - 80;
     board.rows.forEach((row, i) => {
-      const y = y0 + i * 66, mine = row.id === board.myId;
+      const y = y0 + i * 66, mine = local ? i === board.localHighlight : row.id === board.myId;
       ctx.fillStyle = mine ? rgba(PALETTE[2], 0.16) : 'rgba(255,255,255,0.05)';
       roundRect({ x: 40, y, w, h: 56 }, 14); ctx.fill();
       circle(76, y + 28, 18, rgba(PALETTE[i % PALETTE.length]));
       ctx.font = `800 22px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = rgba(INK); ctx.fillText(String(i + 1), 76, y + 29);
-      let name = board.names[row.id] || 'Giocatore';
-      if (mine) name += ' (tu)';
+      let name = local ? row.date : board.names[row.id] || 'Giocatore';
+      if (mine && !local) name += ' (tu)';
       ctx.font = `800 24px ${FONT}`;
       while (name.length > 3 && ctx.measureText(name).width > w - 250) name = name.slice(0, -2) + '…';
       text(112, y + 37, name, 24, WHITE);
