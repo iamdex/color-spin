@@ -25,13 +25,14 @@
   #name:focus { border-color: #ffd43b; }
 </style>
 
-<canvas id="game" tabindex="0" aria-label="Color Spin. Tocca a sinistra o a destra, oppure usa le frecce, per ruotare la figura. P o Esc per la pausa, I per le informazioni."></canvas>
+<canvas id="game" tabindex="0" aria-label="Color Spin. Tocca a sinistra o a destra, oppure usa le frecce, per ruotare la figura. P o Esc per la pausa, M per la musica, S per i suoni, I per le informazioni."></canvas>
 <input id="name" maxlength="14" autocomplete="nickname" enterkeyhint="done" placeholder="Scrivi il tuo nome" aria-label="Il tuo nome in classifica">
 
 <script>
 (() => {
   // Port of the Godot project (scripts/main.gd, shape.gd, ball.gd, fx.gd, sfx.gd).
-  // Differences from Godot: the leaderboard is online (the artifact's shared db)
+  // Music (music.gd) is scheduled with Web Audio start times instead of being
+  // mixed by hand. Differences from Godot: the leaderboard is online (the artifact's shared db)
   // instead of local, with the claude.ai account names instead of a typed one,
   // and saved settings live in localStorage.
   // Logical resolution 720x1280, stretched with "expand" like the Godot project.
@@ -49,7 +50,7 @@
   const BALL_RADIUS = 16, TRAIL_LEN = 12;
   const FONT = 'Montserrat, "Arial Black", Arial, sans-serif';
   const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5 };
-  const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', NAME_KEY = 'color-spin-name';
+  const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
   const VERSION = '1.1';
   const NAME_ROW = 84; // extra room the name field takes on the game over screen
   const ABOUT = [
@@ -64,7 +65,7 @@
     ['COMANDI', [
       'Tocca a sinistra o a destra per ruotare',
       'Tastiera: frecce oppure A e D',
-      'P o Esc pausa  ·  M audio',
+      'P o Esc pausa  ·  M musica  ·  S suoni',
     ]],
     ['CREDITI', [
       'Un gioco di Davide Dex Espertini',
@@ -214,6 +215,7 @@
       this.buffers.figure = buf(arp([523.25, 659.25, 783.99, 1046.5, 1318.51], 0.07, 0.35, 0.12, 0.28, 0.3));
       this.buffers.game_over = buf(arp([392, 311.13, 261.63, 196], 0.16, 0.4, 0.18, 0.35, 0.5));
       this.chimes = PENTA.map(f => buf(blip(f, f, 0.35, 0.12, 0.35, 0.3)));
+      music.init(this.ctx, buf);
     },
     playBuffer(b) {
       if (this.muted || !this.ctx || !b) return;
@@ -259,6 +261,172 @@
     try { localStorage.setItem(MUTE_KEY, sfx.muted ? '1' : '0'); } catch {}
     sfx.play('click');
   }
+
+  function toggleMusic() {
+    music.muted = !music.muted;
+    try { localStorage.setItem(MUSIC_KEY, music.muted ? '1' : '0'); } catch {}
+    music.updateMaster();
+    sfx.play('click');
+  }
+
+  // --- Music ----------------------------------------------------------------
+  // Soft synth-pop in A minor / C major, same parts and numbers as music.gd.
+  const STEPS_PER_BAR = 16, BARS = 4, MENU_BPM = 92, DUCKED = 0.3, OUT_GAIN = 0.5;
+  const LAYER = { PAD: 0, BASS: 1, DRUMS: 2, ARP: 3, LEAD: 4, CLAP: 5 };
+  // Am - F - C - G, one chord per bar (MIDI notes).
+  const CHORDS = [[57, 60, 64], [53, 57, 60], [55, 60, 64], [55, 59, 62]];
+  const ROOTS = [45, 41, 48, 43];
+  const ARP_STEPS = [0, 1, 2, 3, 2, 1, 2, 3, 0, 1, 2, 3, 2, 1, 2, 1];
+  // Lead melody over the 4 bars: step in the loop -> MIDI note.
+  const LEAD = {
+    0: 76, 4: 74, 6: 72, 8: 69, 12: 72, 14: 74,
+    16: 72, 20: 69, 24: 72, 26: 74, 28: 76,
+    32: 79, 36: 76, 38: 74, 40: 72, 44: 76, 46: 79,
+    48: 74, 52: 76, 54: 74, 56: 74, 60: 71, 62: 74,
+  };
+  const midiFreq = m => 440 * 2 ** ((m - 69) / 12);
+  const arpNote = (bar, s) => {
+    const c = CHORDS[bar];
+    return [c[0] + 12, c[1] + 12, c[2] + 12, c[0] + 24][ARP_STEPS[s]];
+  };
+
+  // A plucked or held note: harmonics[k] is the level of harmonic k + 1.
+  function tone(f, dur, attack, decay, amp, harmonics) {
+    const n = Math.floor(dur * RATE), out = new Float32Array(n), inc = TAU * f / RATE;
+    for (let i = 0; i < n; i++) {
+      let v = 0;
+      harmonics.forEach((h, k) => { v += h * Math.sin(inc * i * (k + 1)); });
+      out[i] = v * amp * env(i / RATE, attack, decay);
+    }
+    return out;
+  }
+  // Soft chord pad: two slightly detuned oscillators for a chorus effect.
+  function padChord(notes) {
+    const n = Math.floor(2.8 * RATE), out = new Float32Array(n);
+    for (const m of notes) {
+      const i1 = TAU * midiFreq(m) / RATE, i2 = i1 * 1.004;
+      for (let i = 0; i < n; i++) {
+        const a = i1 * i, b = i2 * i;
+        out[i] += (Math.sin(a) + 0.35 * Math.sin(2 * a) + Math.sin(b) + 0.15 * Math.sin(3 * b)) * 0.045 * env(i / RATE, 0.35, 1.6);
+      }
+    }
+    return out;
+  }
+  // Lead voice with a gentle vibrato that fades in.
+  function leadNote(f) {
+    const n = Math.floor(0.7 * RATE), out = new Float32Array(n);
+    let phase = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / RATE;
+      phase += TAU * f * (1 + 0.004 * Math.sin(TAU * 5.5 * t) * Math.min(t / 0.15, 1)) / RATE;
+      out[i] = (Math.sin(phase) + 0.25 * Math.sin(2 * phase) + 0.1 * Math.sin(3 * phase)) * 0.14 * env(t, 0.01, 0.3);
+    }
+    return out;
+  }
+  function sweep(f0, f1, dur, decay, amp) {
+    const n = Math.floor(dur * RATE), out = new Float32Array(n);
+    let phase = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / RATE;
+      phase += TAU * lerp(f0, f1, t / dur) / RATE;
+      out[i] = Math.sin(phase) * amp * env(t, 0.003, decay);
+    }
+    return out;
+  }
+  // Noise burst; `bright` keeps only the highs (hi-hat) instead of the full band (clap).
+  function noise(dur, decay, amp, bright) {
+    const n = Math.floor(dur * RATE), out = new Float32Array(n);
+    let prev = 0;
+    for (let i = 0; i < n; i++) {
+      const x = rand(-1, 1);
+      out[i] = (bright ? x - prev : x) * amp * env(i / RATE, 0.002, decay);
+      prev = x;
+    }
+    return out;
+  }
+
+  const music = {
+    muted: (() => { try { return localStorage.getItem(MUSIC_KEY) === '1'; } catch { return false; } })(),
+    ctx: null, out: null, layers: [], targets: [0, 0, 0, 0, 0, 0], b: null,
+    playing: false, ducked: false, bpm: MENU_BPM, step: 0, nextTime: 0,
+    // Called once the audio context exists (after the first user gesture).
+    init(ctx, buf) {
+      this.ctx = ctx;
+      this.out = ctx.createGain(); this.out.gain.value = 0; this.out.connect(ctx.destination);
+      this.layers = this.targets.map(() => {
+        const g = ctx.createGain(); g.gain.value = 0; g.connect(this.out); return g;
+      });
+      const b = this.b = { pad: CHORDS.map(c => buf(padChord(c))), bass: {}, arp: {}, lead: {} };
+      for (const r of ROOTS) for (const m of [r, r + 12])
+        b.bass[m] = buf(tone(midiFreq(m), 0.4, 0.005, 0.18, m === r ? 0.32 : 0.28, [1, 0.5, 0.25]));
+      for (let bar = 0; bar < BARS; bar++) for (let s = 0; s < STEPS_PER_BAR; s++) {
+        const m = arpNote(bar, s);
+        b.arp[m] ||= buf(tone(midiFreq(m), 0.3, 0.002, 0.07, 0.1, [1, 0.3]));
+      }
+      for (const m of Object.values(LEAD)) b.lead[m] ||= buf(leadNote(midiFreq(m)));
+      b.kick = buf(sweep(150, 45, 0.25, 0.12, 0.5));
+      b.hat = buf(noise(0.05, 0.015, 0.07, true));
+      b.clap = buf(noise(0.15, 0.05, 0.12, false));
+      this.applyLayers(); this.updateMaster();
+      this.nextTime = ctx.currentTime + 0.05;
+      setInterval(() => this.tick(), 25);
+    },
+    // Calm version for the menu: pad, a little bass and the arpeggio.
+    playMenu() { this.begin(); this.bpm = MENU_BPM; this.setLayers([1, 0.6, 0, 0.7, 0, 0]); },
+    // One more instrument with every new figure (tier), a bit faster every level.
+    playGame(lvl, t) { this.begin(); this.setLevel(lvl, t); },
+    setLevel(lvl, t) {
+      this.bpm = Math.min(100 + 2 * (lvl - 1), 128);
+      this.setLayers([1, 1, t >= 1, t >= 2, t >= 3, t >= 4].map(Number));
+    },
+    setDucked(on) { this.ducked = on; this.updateMaster(); },
+    // Fades out; the next play* starts again from the first bar.
+    stop() { this.playing = false; this.updateMaster(); },
+    begin() {
+      if (!this.playing) { this.step = 0; if (this.ctx) this.nextTime = this.ctx.currentTime + 0.05; }
+      this.playing = true; this.ducked = false; this.updateMaster();
+    },
+    setLayers(t) { this.targets = t; this.applyLayers(); },
+    applyLayers() {
+      if (!this.ctx) return;
+      this.layers.forEach((g, i) => g.gain.setTargetAtTime(this.targets[i], this.ctx.currentTime, 0.25));
+    },
+    updateMaster() {
+      if (!this.ctx) return;
+      const v = this.muted || !this.playing ? 0 : (this.ducked ? DUCKED : 1) * OUT_GAIN;
+      this.out.gain.setTargetAtTime(v, this.ctx.currentTime, 0.2);
+    },
+    // Look-ahead scheduler: queues the 16ths due in the next ~120 ms.
+    tick() {
+      const now = this.ctx.currentTime;
+      if (!this.playing || this.muted || this.nextTime < now - 0.2) {
+        // Silent, or the tab was frozen: don't try to catch up.
+        this.nextTime = Math.max(this.nextTime, now + 0.05);
+        if (!this.playing || this.muted) return;
+      }
+      while (this.nextTime < now + 0.12) {
+        this.trigger(this.step, this.nextTime);
+        this.step = (this.step + 1) % (STEPS_PER_BAR * BARS);
+        this.nextTime += 60 / this.bpm / 4;
+      }
+    },
+    trigger(step, when) {
+      const bar = Math.floor(step / STEPS_PER_BAR), s = step % STEPS_PER_BAR, b = this.b;
+      if (s === 0) this.voice(b.pad[bar], LAYER.PAD, when);
+      if (s % 2 === 0) this.voice(b.bass[ROOTS[bar] + (s === 6 || s === 14 ? 12 : 0)], LAYER.BASS, when);
+      if (s === 0 || s === 8) this.voice(b.kick, LAYER.DRUMS, when);
+      if (s % 4 === 2) this.voice(b.hat, LAYER.DRUMS, when);
+      if (s === 4 || s === 12) this.voice(b.clap, LAYER.CLAP, when);
+      this.voice(b.arp[arpNote(bar, s)], LAYER.ARP, when);
+      if (LEAD[step]) this.voice(b.lead[LEAD[step]], LAYER.LEAD, when);
+    },
+    // Silent layers don't start new notes.
+    voice(buffer, layer, when) {
+      if (this.targets[layer] <= 0 && this.layers[layer].gain.value < 0.001) return;
+      const src = this.ctx.createBufferSource();
+      src.buffer = buffer; src.connect(this.layers[layer]); src.start(when);
+    },
+  };
 
   // --- Leaderboard ----------------------------------------------------------
   // Online on claude.ai: one document per player, scores/<user id> =
@@ -428,6 +596,7 @@
     hideNameInput();
     balls = []; clearFx();
     state = STATE.MENU; shape.setup(MENU_SIDES); menuTurnTimer = 1; fade = 1;
+    music.playMenu();
   }
 
   function start() {
@@ -437,6 +606,7 @@
     streak = 0; lastRank = 0; lastGameImproved = false;
     state = STATE.PLAYING; fade = 1;
     shape.setup(sidesForLevel(level));
+    music.playGame(level, tier(level));
     showBanner('Livello 1');
   }
 
@@ -489,6 +659,7 @@
 
   function levelUp() {
     level++;
+    music.setLevel(level, tier(level));
     const n = sidesForLevel(level);
     if (n !== shape.sides) {
       // New figure: clear the board, a moment to look at it, and a life back.
@@ -507,12 +678,12 @@
 
   function pause() {
     state = STATE.PAUSED; pauseTime = 0; resumeTimer = 0;
-    sfx.play('click');
+    sfx.play('click'); music.setDucked(true);
   }
 
   function gameOver() {
     state = STATE.GAME_OVER; gameOverTime = 0;
-    sfx.play('game_over');
+    sfx.play('game_over'); music.stop();
     for (const b of balls) b.dead = true;
     for (const c of shape.colors) burst(0, 0, c, 10, 450);
     if (score > best) { best = score; newBest = true; saveBest(); }
@@ -539,7 +710,12 @@
     { x: W / 2 - 150, y: H * 0.45, w: 300, h: 88 },
     { x: W / 2 - 150, y: H * 0.45 + 108, w: 300, h: 88 },
   ];
-  const pauseSoundButton = () => ({ x: W / 2 - 34, y: H * 0.45 + 232, w: 68, h: 68 });
+  // Music and sound effects toggles, side by side under the pause buttons.
+  const pauseAudioButtons = () => [
+    { x: W / 2 - 84, y: H * 0.45 + 232, w: 68, h: 68 },
+    { x: W / 2 + 16, y: H * 0.45 + 232, w: 68, h: 68 },
+  ];
+  const musicButton = () => ({ x: W - 168, y: 24, w: 68, h: 68 });
   const grow = (r, k) => ({ x: r.x - k, y: r.y - k, w: r.w + 2 * k, h: r.h + 2 * k });
   const gameOverButtons = () => {
     const y = H * 0.62 + (nameShown ? NAME_ROW : 0);
@@ -549,9 +725,11 @@
 
   function handle(action, pos) {
     sfx.unlock();
-    if (action === 'mute') { toggleSound(); return; }
+    if (action === 'music') { toggleMusic(); return; }
+    if (action === 'effects') { toggleSound(); return; }
     if (state === STATE.MENU) {
       if (action === 'tap' && hit(soundButton(), pos)) toggleSound();
+      else if (action === 'tap' && hit(musicButton(), pos)) toggleMusic();
       else if (action === 'tap' && hit(menuButtons()[1], pos)) {
         sfx.play('click'); state = STATE.LEADERBOARD; fade = 0.6; refreshNames();
       } else if (action === 'info' || (action === 'tap' && hit(infoButton(), pos))) {
@@ -573,7 +751,9 @@
     } else if (state === STATE.PAUSED) {
       if (resumeTimer > 0) return;
       const b = pauseButtons();
-      if (action === 'tap' && hit(pauseSoundButton(), pos)) toggleSound();
+      const audio = pauseAudioButtons();
+      if (action === 'tap' && hit(audio[0], pos)) toggleMusic();
+      else if (action === 'tap' && hit(audio[1], pos)) toggleSound();
       else if (['confirm', 'pause', 'back'].includes(action) || hit(b[0], pos)) {
         sfx.play('click'); resumeTimer = RESUME_BEATS * RESUME_BEAT;
       } else if (hit(b[1], pos)) {
@@ -600,7 +780,7 @@
   });
   const KEYS = {
     ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right',
-    ' ': 'confirm', Enter: 'confirm', ArrowUp: 'confirm', Escape: 'back', m: 'mute', M: 'mute',
+    ' ': 'confirm', Enter: 'confirm', ArrowUp: 'confirm', Escape: 'back', m: 'music', M: 'music', s: 'effects', S: 'effects',
     p: 'pause', P: 'pause', i: 'info', I: 'info',
   };
   window.addEventListener('keydown', e => {
@@ -614,7 +794,10 @@
     if (state === STATE.PLAYING) pause();
     else if (state === STATE.PAUSED) resumeTimer = 0; // back to the pause menu instead of resuming unattended
   }
-  document.addEventListener('visibilitychange', () => { if (document.hidden) onLeave(); });
+  // Hidden tabs throttle timers: suspend audio instead of letting the music stutter.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { onLeave(); sfx.ctx?.suspend(); } else sfx.ctx?.resume();
+  });
   window.addEventListener('blur', onLeave);
 
   // --- Layout ---------------------------------------------------------------
@@ -676,7 +859,7 @@
     if (resumeTimer <= 0) return;
     const beat = Math.ceil(resumeTimer / RESUME_BEAT);
     resumeTimer -= dt;
-    if (resumeTimer <= 0) { resumeTimer = 0; state = STATE.PLAYING; }
+    if (resumeTimer <= 0) { resumeTimer = 0; state = STATE.PLAYING; music.setDucked(false); }
     else if (Math.ceil(resumeTimer / RESUME_BEAT) < beat) sfx.play('click');
   }
 
@@ -778,6 +961,7 @@
     button(lb, 'CLASSIFICA', WHITE, 0.1, WHITE);
     if (best > 0) centered(`RECORD  ${best}`, lb.y + lb.h + 52, 24, WHITE, 0.55);
     drawSoundIcon(soundButton());
+    drawMusicIcon(musicButton());
     drawInfoIcon(infoButton());
   }
 
@@ -813,6 +997,22 @@
     ctx.beginPath(); ctx.arc(cx, cy, 17, 0, TAU); ctx.stroke();
     circle(cx, cy - 8, 2.8, col);
     ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(cx, cy - 2); ctx.lineTo(cx, cy + 9); ctx.stroke();
+  }
+
+  // Two beamed eighth notes, crossed out when the music is off.
+  function drawMusicIcon(r) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2, col = 'rgba(255,255,255,0.75)';
+    ctx.strokeStyle = col; ctx.lineCap = 'round';
+    for (const x of [-9, 9]) {
+      circle(cx + x - 4, cy + 10, 5.5, col);
+      ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx + x + 1, cy + 10); ctx.lineTo(cx + x + 1, cy - 12); ctx.stroke();
+    }
+    ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx - 8, cy - 12); ctx.lineTo(cx + 10, cy - 15); ctx.stroke();
+    if (music.muted) {
+      ctx.beginPath(); ctx.moveTo(cx - 20, cy - 18); ctx.lineTo(cx + 20, cy + 18);
+      ctx.strokeStyle = rgba(BG_BOTTOM, 0.9); ctx.lineWidth = 7; ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
+    }
   }
 
   function drawSoundIcon(r) {
@@ -918,7 +1118,9 @@
     const b = pauseButtons();
     button(b[0], 'RIPRENDI', PALETTE[2], 1, INK);
     button(b[1], 'MENU', WHITE, 0.1, WHITE);
-    drawSoundIcon(pauseSoundButton());
+    const audio = pauseAudioButtons();
+    drawMusicIcon(audio[0]);
+    drawSoundIcon(audio[1]);
   }
 
   function drawGameOver() {
