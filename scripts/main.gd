@@ -7,6 +7,7 @@ const ShapeScript := preload("res://scripts/shape.gd")
 const BallScript := preload("res://scripts/ball.gd")
 const FxScript := preload("res://scripts/fx.gd")
 const SfxScript := preload("res://scripts/sfx.gd")
+const MusicScript := preload("res://scripts/music.gd")
 
 const PALETTE: Array[Color] = [
 	Color("#ff4d6d"), # red
@@ -39,7 +40,7 @@ const ABOUT := [
 	["COMANDI", [
 		"Tocca a sinistra o a destra per ruotare",
 		"Tastiera: frecce oppure A e D",
-		"P o Esc pausa  ·  M audio",
+		"P o Esc pausa  ·  M musica  ·  S suoni",
 	]],
 	["CREDITI", [
 		"Un gioco di Davide Dex Espertini",
@@ -89,6 +90,7 @@ var shape: Node2D
 var balls: Node2D
 var fx: Node2D
 var sfx: Node
+var music: Node
 var hud: Control
 var name_edit: LineEdit
 var font: Font
@@ -112,6 +114,8 @@ func _ready() -> void:
 	world.add_child(fx)
 	sfx = SfxScript.new()
 	add_child(sfx)
+	music = MusicScript.new()
+	add_child(music)
 
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -190,6 +194,7 @@ func _go_to_menu() -> void:
 	_clear_board()
 	state = State.MENU
 	shape.setup(MENU_SIDES, PALETTE)
+	music.play_menu()
 	menu_turn_timer = 1.0
 	fade = 1.0
 
@@ -208,6 +213,7 @@ func _start() -> void:
 	state = State.PLAYING
 	fade = 1.0
 	shape.setup(_sides_for_level(level), PALETTE)
+	music.play_game(level, _tier(level))
 	_show_banner("Livello 1")
 
 
@@ -238,11 +244,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_I:
 				action = "info"
 			KEY_M:
-				action = "mute"
+				action = "music"
+			KEY_S:
+				action = "effects"
 	if action == "":
 		return
 	get_viewport().set_input_as_handled()
-	if action == "mute":
+	if action == "music":
+		_toggle_music()
+		return
+	if action == "effects":
 		_toggle_sound()
 		return
 
@@ -250,6 +261,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		State.MENU:
 			if action == "tap" and _sound_button().has_point(pos):
 				_toggle_sound()
+			elif action == "tap" and _music_button().has_point(pos):
+				_toggle_music()
 			elif action == "tap" and _menu_buttons()[1].has_point(pos):
 				sfx.play("click")
 				state = State.LEADERBOARD
@@ -281,7 +294,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			if resume_timer > 0.0:
 				return
 			var buttons := _pause_buttons()
-			if action == "tap" and _pause_sound_button().has_point(pos):
+			var audio := _pause_audio_buttons()
+			if action == "tap" and audio[0].has_point(pos):
+				_toggle_music()
+			elif action == "tap" and audio[1].has_point(pos):
 				_toggle_sound()
 			elif action in ["confirm", "pause", "back"] or buttons[0].has_point(pos):
 				sfx.play("click")
@@ -315,6 +331,7 @@ func _pause() -> void:
 	resume_timer = 0.0
 	sfx.play("click")
 	_set_paused(true)
+	music.set_ducked(true)
 
 
 func _set_paused(on: bool) -> void:
@@ -329,6 +346,12 @@ func _notification(what: int) -> void:
 		_pause()
 	elif state == State.PAUSED:
 		resume_timer = 0.0 # back to the pause menu instead of resuming unattended
+
+
+func _toggle_music() -> void:
+	music.muted = not music.muted
+	sfx.play("click")
+	_save()
 
 
 func _toggle_sound() -> void:
@@ -393,6 +416,7 @@ func _process_paused(delta: float) -> void:
 		resume_timer = 0.0
 		state = State.PLAYING
 		_set_paused(false)
+		music.set_ducked(false)
 	elif ceili(resume_timer / RESUME_BEAT) < beat:
 		sfx.play("click")
 
@@ -463,6 +487,7 @@ func _on_miss(ball: Node2D) -> void:
 
 func _level_up() -> void:
 	level += 1
+	music.set_level(level, _tier(level))
 	var n := _sides_for_level(level)
 	if n != shape.sides:
 		# New figure: clear the board, give the player a moment to look at it
@@ -488,6 +513,7 @@ func _game_over() -> void:
 	state = State.GAME_OVER
 	game_over_time = 0.0
 	sfx.play("game_over")
+	music.stop()
 	for b in balls.get_children():
 		b.queue_free()
 	for c in shape.colors:
@@ -647,6 +673,7 @@ func _draw_menu(size: Vector2) -> void:
 	if best > 0:
 		_centered("RECORD  %d" % best, buttons[1].end.y + 52.0, 24, Color(1, 1, 1, 0.55))
 	_draw_sound_icon(_sound_button())
+	_draw_music_icon(_music_button())
 	_draw_info_icon(_info_button())
 
 
@@ -717,7 +744,9 @@ func _draw_pause(size: Vector2) -> void:
 	var buttons := _pause_buttons()
 	_button(buttons[0], "RIPRENDI", PALETTE[2], INK)
 	_button(buttons[1], "MENU", Color(1, 1, 1, 0.1), Color.WHITE)
-	_draw_sound_icon(_pause_sound_button())
+	var audio := _pause_audio_buttons()
+	_draw_music_icon(audio[0])
+	_draw_sound_icon(audio[1])
 
 
 func _draw_leaderboard(size: Vector2) -> void:
@@ -809,6 +838,19 @@ func _draw_info_icon(rect: Rect2) -> void:
 	hud.draw_line(c + Vector2(0, -2), c + Vector2(0, 9), col, 4.0, true)
 
 
+## Two beamed eighth notes, crossed out when the music is off.
+func _draw_music_icon(rect: Rect2) -> void:
+	var c := rect.get_center()
+	var col := Color(1, 1, 1, 0.75)
+	for x in [-9.0, 9.0]:
+		hud.draw_circle(c + Vector2(x - 4, 10), 5.5, col)
+		hud.draw_line(c + Vector2(x + 1, 10), c + Vector2(x + 1, -12), col, 3.0, true)
+	hud.draw_line(c + Vector2(-8, -12), c + Vector2(10, -15), col, 5.0, true)
+	if music.muted:
+		hud.draw_line(c + Vector2(-20, -18), c + Vector2(20, 18), Color(BG_BOTTOM, 0.9), 7.0, true)
+		hud.draw_line(c + Vector2(-20, -18), c + Vector2(20, 18), col, 3.0, true)
+
+
 func _draw_sound_icon(rect: Rect2) -> void:
 	var c := rect.get_center()
 	var col := Color(1, 1, 1, 0.75)
@@ -836,6 +878,10 @@ func _sound_button() -> Rect2:
 	return Rect2(hud.size.x - 92, 24, 68, 68)
 
 
+func _music_button() -> Rect2:
+	return Rect2(hud.size.x - 168, 24, 68, 68)
+
+
 func _info_button() -> Rect2:
 	return Rect2(24, 24, 68, 68)
 
@@ -853,8 +899,10 @@ func _pause_buttons() -> Array[Rect2]:
 	]
 
 
-func _pause_sound_button() -> Rect2:
-	return Rect2(hud.size.x / 2.0 - 34, hud.size.y * 0.45 + 232, 68, 68)
+## Music and sound effects toggles, side by side under the pause buttons.
+func _pause_audio_buttons() -> Array[Rect2]:
+	var y := hud.size.y * 0.45 + 232
+	return [Rect2(hud.size.x / 2.0 - 84, y, 68, 68), Rect2(hud.size.x / 2.0 + 16, y, 68, 68)]
 
 
 ## Right under the rank line; the buttons move down to make room for it.
@@ -908,6 +956,7 @@ func _load() -> void:
 		return
 	best = cfg.get_value("score", "best", 0)
 	sfx.muted = cfg.get_value("settings", "muted", false)
+	music.muted = cfg.get_value("settings", "music_muted", false)
 	player_name = cfg.get_value("settings", "name", "")
 	top.clear()
 	for e in cfg.get_value("score", "top", []):
@@ -920,5 +969,6 @@ func _save() -> void:
 	cfg.set_value("score", "best", best)
 	cfg.set_value("score", "top", top)
 	cfg.set_value("settings", "muted", sfx.muted)
+	cfg.set_value("settings", "music_muted", music.muted)
 	cfg.set_value("settings", "name", player_name)
 	cfg.save(SAVE_PATH)
