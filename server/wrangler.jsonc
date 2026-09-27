@@ -4,6 +4,7 @@
   "main": "src/index.js",
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
+  "routes": [{ "pattern": "scores.espertini.com", "custom_domain": true }],
   "d1_databases": [
     {
       "binding": "DB",
