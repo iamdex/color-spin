@@ -1,7 +1,7 @@
 extends Node2D
 ## Game loop: main menu, spawns balls from the 4 screen edges, checks hits
-## against the figure, tracks score / lives / level, handles input, game over,
-## sound and the local leaderboard.
+## against the figure, tracks score / lives / level, handles input, pause,
+## game over, sound and the local leaderboard.
 
 const ShapeScript := preload("res://scripts/shape.gd")
 const BallScript := preload("res://scripts/ball.gd")
@@ -31,8 +31,10 @@ const SPAWN_DIRS: Array[Vector2] = [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vect
 const SAVE_PATH := "user://save.cfg"
 const DOT_COUNT := 40
 const TOP_SIZE := 10
+const RESUME_BEATS := 3   # "3, 2, 1" countdown before play resumes
+const RESUME_BEAT := 0.5
 
-enum State { MENU, PLAYING, GAME_OVER, LEADERBOARD }
+enum State { MENU, PLAYING, PAUSED, GAME_OVER, LEADERBOARD }
 
 var state := State.MENU
 var score := 0
@@ -49,6 +51,8 @@ var score_pop := 0.0
 var banner := ""
 var banner_time := 0.0
 var game_over_time := 0.0
+var pause_time := 0.0
+var resume_timer := 0.0       # > 0 while the resume countdown runs
 var time := 0.0
 var dots: Array[Vector3] = [] # x, y, radius of the drifting background dots
 var streak := 0               # consecutive hits, drives the hit sound's pitch
@@ -68,7 +72,11 @@ var font: Font
 func _ready() -> void:
 	randomize()
 	font = _make_font()
+	# Pausing freezes the tree: balls, effects and the figure's tweens live
+	# under `world` and stop, while this node keeps running menus and input.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	world = Node2D.new()
+	world.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(world)
 	balls = Node2D.new()
 	world.add_child(balls)
@@ -104,6 +112,7 @@ func _make_font() -> Font:
 
 
 func _go_to_menu() -> void:
+	_set_paused(false)
 	_clear_board()
 	state = State.MENU
 	shape.setup(MENU_SIDES, PALETTE)
@@ -112,6 +121,7 @@ func _go_to_menu() -> void:
 
 
 func _start() -> void:
+	_set_paused(false)
 	_clear_board()
 	score = 0
 	streak = 0
@@ -148,6 +158,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				action = "confirm"
 			KEY_ESCAPE:
 				action = "back"
+			KEY_P:
+				action = "pause"
 			KEY_M:
 				action = "mute"
 	if action == "":
@@ -168,6 +180,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif action != "back":
 				_start()
 		State.PLAYING:
+			if action == "pause" or action == "back" \
+					or (action == "tap" and _pause_button().grow(12).has_point(pos)):
+				_pause()
+				return
 			var dir := 0
 			match action:
 				"left":
@@ -180,6 +196,19 @@ func _unhandled_input(event: InputEvent) -> void:
 				shape.rotate_step(dir)
 				sfx.play("turn_left" if dir < 0 else "turn_right")
 				arrow_flash[0 if dir < 0 else 1] = 1.0
+		State.PAUSED:
+			if resume_timer > 0.0:
+				return
+			var buttons := _pause_buttons()
+			if action == "tap" and _pause_sound_button().has_point(pos):
+				_toggle_sound()
+			elif action in ["confirm", "pause", "back"] or buttons[0].has_point(pos):
+				sfx.play("click")
+				resume_timer = RESUME_BEATS * RESUME_BEAT
+			elif buttons[1].has_point(pos):
+				# Leaving mid-game: the run is dropped, not recorded.
+				sfx.play("click")
+				_go_to_menu()
 		State.GAME_OVER:
 			if game_over_time < 0.6:
 				return
@@ -197,6 +226,28 @@ func _unhandled_input(event: InputEvent) -> void:
 			fade = 0.6
 
 
+func _pause() -> void:
+	state = State.PAUSED
+	pause_time = 0.0
+	resume_timer = 0.0
+	sfx.play("click")
+	_set_paused(true)
+
+
+func _set_paused(on: bool) -> void:
+	get_tree().paused = on
+
+
+## Leaving the app (home button, tab switch, lost focus) pauses a running game.
+func _notification(what: int) -> void:
+	if what not in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]:
+		return
+	if state == State.PLAYING:
+		_pause()
+	elif state == State.PAUSED:
+		resume_timer = 0.0 # back to the pause menu instead of resuming unattended
+
+
 func _toggle_sound() -> void:
 	sfx.muted = not sfx.muted
 	sfx.play("click")
@@ -207,21 +258,20 @@ func _process(delta: float) -> void:
 	var size := get_viewport_rect().size
 	var center := size / 2.0
 	time += delta
+	fade = maxf(fade - delta * 3.0, 0.0)
+	_move_dots(size, delta)
+	if state == State.PAUSED:
+		_process_paused(delta)
+		queue_redraw()
+		hud.queue_redraw()
+		return
 	shake = maxf(shake - delta * 30.0, 0.0)
 	flash = maxf(flash - delta * 2.5, 0.0)
-	fade = maxf(fade - delta * 3.0, 0.0)
 	score_pop = maxf(score_pop - delta * 4.0, 0.0)
 	banner_time = maxf(banner_time - delta, 0.0)
 	for i in 2:
 		arrow_flash[i] = maxf(arrow_flash[i] - delta * 4.0, 0.0)
 	world.position = center + Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake
-
-	for i in dots.size():
-		var d := dots[i]
-		d.y -= (6.0 + d.z * 8.0) * delta
-		if d.y < -10.0:
-			d = Vector3(randf() * size.x, size.y + 10.0, d.z)
-		dots[i] = d
 
 	match state:
 		State.MENU, State.LEADERBOARD:
@@ -242,6 +292,30 @@ func _process(delta: float) -> void:
 			game_over_time += delta
 	queue_redraw()
 	hud.queue_redraw()
+
+
+## Everything in play is frozen; only the overlay and the resume countdown move.
+func _process_paused(delta: float) -> void:
+	pause_time += delta
+	if resume_timer <= 0.0:
+		return
+	var beat := ceili(resume_timer / RESUME_BEAT)
+	resume_timer -= delta
+	if resume_timer <= 0.0:
+		resume_timer = 0.0
+		state = State.PLAYING
+		_set_paused(false)
+	elif ceili(resume_timer / RESUME_BEAT) < beat:
+		sfx.play("click")
+
+
+func _move_dots(size: Vector2, delta: float) -> void:
+	for i in dots.size():
+		var d := dots[i]
+		d.y -= (6.0 + d.z * 8.0) * delta
+		if d.y < -10.0:
+			d = Vector3(randf() * size.x, size.y + 10.0, d.z)
+		dots[i] = d
 
 
 func _spawn_ball() -> void:
@@ -432,6 +506,9 @@ func _draw_hud() -> void:
 			_draw_menu(size)
 		State.PLAYING:
 			_draw_play(size)
+		State.PAUSED:
+			_draw_play(size)
+			_draw_pause(size)
 		State.GAME_OVER:
 			_draw_play(size)
 			_draw_game_over(size)
@@ -496,6 +573,7 @@ func _draw_play(size: Vector2) -> void:
 
 	# Turn arrows in the bottom corners: each half of the screen turns one way.
 	if state == State.PLAYING:
+		_draw_pause_icon(_pause_button())
 		_draw_turn_arrow(Vector2(96, size.y - 110), -1, 0.12 + 0.6 * arrow_flash[0])
 		_draw_turn_arrow(Vector2(size.x - 96, size.y - 110), 1, 0.12 + 0.6 * arrow_flash[1])
 
@@ -524,6 +602,26 @@ func _draw_game_over(size: Vector2) -> void:
 		var buttons := _game_over_buttons()
 		_button(buttons[0], "RIGIOCA", PALETTE[2], INK)
 		_button(buttons[1], "MENU", Color(1, 1, 1, 0.1), Color.WHITE)
+
+
+func _draw_pause(size: Vector2) -> void:
+	if resume_timer > 0.0:
+		# Countdown over the frozen board, so the player can see what's coming.
+		var n := ceili(resume_timer / RESUME_BEAT)
+		var k := fmod(resume_timer, RESUME_BEAT) / RESUME_BEAT # 1 -> 0 within a beat
+		hud.draw_rect(Rect2(Vector2.ZERO, size), Color(BG_BOTTOM, 0.35))
+		_centered(str(n), size.y * 0.22 + 20, int(lerpf(90, 130, k)), Color(1, 1, 1, clampf(k * 2.0, 0.0, 1.0)))
+		return
+	var t := clampf(pause_time * 5.0, 0.0, 1.0)
+	hud.draw_rect(Rect2(Vector2.ZERO, size), Color(BG_BOTTOM, 0.8 * t))
+	var slide := (1.0 - t) * 30.0
+	_centered("PAUSA", size.y * 0.3 + slide, 68, Color(1, 1, 1, t))
+	_centered("%d PUNTI  ·  LIVELLO %d" % [score, level], size.y * 0.3 + 48 + slide, 22,
+			Color(1, 1, 1, 0.55 * t))
+	var buttons := _pause_buttons()
+	_button(buttons[0], "RIPRENDI", PALETTE[2], INK)
+	_button(buttons[1], "MENU", Color(1, 1, 1, 0.1), Color.WHITE)
+	_draw_sound_icon(_pause_sound_button())
 
 
 func _draw_leaderboard(size: Vector2) -> void:
@@ -582,6 +680,13 @@ func _draw_turn_arrow(center: Vector2, dir: int, alpha: float) -> void:
 	]), col)
 
 
+func _draw_pause_icon(rect: Rect2) -> void:
+	var c := rect.get_center()
+	hud.draw_circle(c, 30, Color(1, 1, 1, 0.08))
+	for x in [-7.0, 7.0]:
+		hud.draw_line(c + Vector2(x, -11), c + Vector2(x, 11), Color(1, 1, 1, 0.75), 7.0, true)
+
+
 func _draw_sound_icon(rect: Rect2) -> void:
 	var c := rect.get_center()
 	var col := Color(1, 1, 1, 0.75)
@@ -607,6 +712,23 @@ func _menu_buttons() -> Array[Rect2]:
 
 func _sound_button() -> Rect2:
 	return Rect2(hud.size.x - 92, 24, 68, 68)
+
+
+## Top center, between the score and the lives.
+func _pause_button() -> Rect2:
+	return Rect2(hud.size.x / 2.0 - 34, 22, 68, 68)
+
+
+func _pause_buttons() -> Array[Rect2]:
+	var size := hud.size
+	return [
+		Rect2(size.x / 2.0 - 150, size.y * 0.45, 300, 88),
+		Rect2(size.x / 2.0 - 150, size.y * 0.45 + 108, 300, 88),
+	]
+
+
+func _pause_sound_button() -> Rect2:
+	return Rect2(hud.size.x / 2.0 - 34, hud.size.y * 0.45 + 232, 68, 68)
 
 
 func _game_over_buttons() -> Array[Rect2]:
