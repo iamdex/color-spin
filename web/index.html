@@ -23,12 +23,13 @@
 
 <script>
 (() => {
-  // Port of the Godot project (scripts/main.gd, shape.gd, ball.gd, fx.gd, sfx.gd).
-  // Music (music.gd) is scheduled with Web Audio start times instead of being
-  // mixed by hand. Differences from Godot: the leaderboard is online (the artifact's shared db)
-  // instead of local, with the claude.ai account names instead of a typed one,
-  // and saved settings live in localStorage.
-  // Logical resolution 720x1280, stretched with "expand" like the Godot project.
+  // Color Spin. This page is the game: it runs as the claude.ai artifact, on
+  // GitHub Pages and inside the mobile app (mobile/, a WebView). It started as
+  // a port of the Godot project, now archived in godot/.
+  // Music is scheduled with Web Audio start times. On claude.ai the leaderboard
+  // is online (the artifact's shared db) with the account names; elsewhere it
+  // is a local top 10 with a typed name. Saved settings live in localStorage.
+  // Logical resolution 720x1280, stretched to fill the screen.
   const BASE_W = 720, BASE_H = 1280;
   const TAU = Math.PI * 2;
 
@@ -46,8 +47,7 @@
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
   const VERSION = '1.1';
   const SITE_URL = 'https://espertini.com', SITE_LABEL = 'espertini.com', LANG_KEY = 'color-spin-lang';
-  // Same table as scripts/strings.gd (generated from it), plus the web-only
-  // texts of the online leaderboard and the accessibility labels.
+  // All the game's texts. The texts of the online leaderboard are used only on claude.ai.
   const TEXT = {
     "it": {
       "lang_name": "ITALIANO",
@@ -105,7 +105,7 @@
           "CREDITI",
           [
             "Un gioco di Davide Dex Espertini",
-            "Fatto con Godot 4: grafica, suoni",
+            "Fatto in JavaScript: grafica, suoni",
             "e musica sono generati dal codice"
           ]
         ]
@@ -174,7 +174,7 @@
           "CREDITS",
           [
             "A game by Davide Dex Espertini",
-            "Made with Godot 4: graphics, sounds",
+            "Made in JavaScript: graphics, sounds",
             "and music are generated in code"
           ]
         ]
@@ -565,7 +565,7 @@
   // Online on claude.ai: one document per player, scores/<user id> =
   // {score, level, at}; names are resolved from the id at render time, never
   // stored. Anywhere else (e.g. GitHub Pages) it falls back to a local top 10
-  // in localStorage, like the Godot version.
+  // in localStorage.
   const LOCAL_KEY = 'color-spin-top';
   const board = {
     status: 'loading', // loading | ready (online) | local
@@ -913,7 +913,7 @@
         sfx.play('click'); state = STATE.MENU; fade = 0.6;
       }
     } else if (state === STATE.ABOUT && action === 'tap' && hit(linkRect, pos)) {
-      sfx.play('click'); window.open(SITE_URL, '_blank', 'noopener');
+      sfx.play('click'); openLink(SITE_URL);
     } else {
       // Any tap or key goes back: the whole screen is the "back" button.
       sfx.play('click'); state = STATE.MENU; fade = 0.6;
@@ -948,6 +948,27 @@
     if (document.hidden) { onLeave(); sfx.ctx?.suspend(); } else sfx.ctx?.resume();
   });
   window.addEventListener('blur', onLeave);
+
+  // --- Mobile app -------------------------------------------------------------
+  // Inside the app's WebView (mobile/App.js) links open in the phone's browser,
+  // and the app calls these hooks for the Android back button and for going to
+  // the background, where the WebView does not reliably fire visibilitychange.
+  const app = window.ReactNativeWebView;
+  const tellApp = msg => app.postMessage(JSON.stringify(msg));
+  function openLink(url) {
+    if (app) tellApp({ type: 'open', url });
+    else window.open(url, '_blank', 'noopener');
+  }
+  window.colorSpinApp = {
+    background() { onLeave(); sfx.ctx?.suspend(); },
+    foreground() { sfx.ctx?.resume(); },
+    // Back works like Esc, except that on the main menu it closes the app.
+    back() {
+      if (nameShown && document.activeElement === nameInput) nameInput.blur();
+      else if (state === STATE.MENU) tellApp({ type: 'exit' });
+      else handle('back');
+    },
+  };
 
   // --- Layout ---------------------------------------------------------------
   function resize() {

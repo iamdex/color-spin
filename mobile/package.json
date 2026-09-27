@@ -1,0 +1,31 @@
+{
+  "name": "color-spin",
+  "version": "1.1.0",
+  "main": "index.js",
+  "dependencies": {
+    "eslint-config-expo": "~57.0.2",
+    "expo": "~57.0.25",
+    "expo-keep-awake": "~57.0.2",
+    "expo-navigation-bar": "~57.0.2",
+    "expo-splash-screen": "~57.0.9",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.4",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-webview": "13.16.1"
+  },
+  "scripts": {
+    "build-game": "node scripts/build-game.mjs",
+    "postinstall": "node scripts/build-game.mjs",
+    "start": "node scripts/build-game.mjs && expo start",
+    "android": "node scripts/build-game.mjs && expo start --android",
+    "ios": "node scripts/build-game.mjs && expo start --ios",
+    "lint": "expo lint"
+  },
+  "private": true,
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "~57.0.2"
+  }
+}
