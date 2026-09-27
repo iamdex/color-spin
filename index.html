@@ -687,7 +687,7 @@
   // Each device is an anonymous player with a random id; the server keeps its
   // best game and its name. A game that could not be sent (offline) waits in
   // localStorage and goes out with the next successful sync.
-  const SCORES_URL = 'https://color-spin-scores.beasy-policy-proxy.workers.dev/v1/scores';
+  const SCORES_URL = 'https://scores.espertini.com/v1/scores';
   const PLAYER_KEY = 'color-spin-player', PENDING_KEY = 'color-spin-pending';
   const RETRY_GAP = 2500; // the server takes one write every 2 s per player
   const net = {
