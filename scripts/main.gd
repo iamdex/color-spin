@@ -42,7 +42,7 @@ const ABOUT := [
 		"P o Esc pausa  ·  M audio",
 	]],
 	["CREDITI", [
-		"Un gioco di iamdex",
+		"Un gioco di Davide Dex Espertini",
 		"Fatto con Godot 4: grafica e suoni",
 		"sono generati dal codice",
 		"github.com/iamdex/color-spin",
