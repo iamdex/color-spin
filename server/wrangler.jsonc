@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "color-spin-scores",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "color-spin-scores",
+      "database_id": "72db9186-a23d-4e8e-8966-f0bd4a3aef79"
+    }
+  ],
+  "observability": { "enabled": true }
+}

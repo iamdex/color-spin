@@ -27,8 +27,9 @@
   // GitHub Pages and inside the mobile app (mobile/, a WebView). It started as
   // a port of the Godot project, now archived in godot/.
   // Music is scheduled with Web Audio start times. On claude.ai the leaderboard
-  // is online (the artifact's shared db) with the account names; elsewhere it
-  // is a local top 10 with a typed name. Saved settings live in localStorage.
+  // is the artifact's shared db with the account names; elsewhere it is the
+  // global one (server/, a Cloudflare Worker) with a typed name, or a local
+  // top 10 when offline. Saved settings live in localStorage.
   // Logical resolution 720x1280, stretched to fill the screen.
   const BASE_W = 720, BASE_H = 1280;
   const TAU = Math.PI * 2;
@@ -45,7 +46,7 @@
   const FONT = 'Montserrat, "Arial Black", Arial, sans-serif';
   const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6 };
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
-  const VERSION = '1.1';
+  const VERSION = '1.2';
   const SITE_URL = 'https://espertini.com', SITE_LABEL = 'espertini.com', LANG_KEY = 'color-spin-lang';
   // All the game's texts. The texts of the online leaderboard are used only on claude.ai.
   const TEXT = {
@@ -111,6 +112,7 @@
         ]
       ],
       "top_online": "I 10 migliori giocatori",
+      "top_world": "I 10 migliori al mondo",
       "loading": "Caricamento…",
       "sign_in": "Accedi per entrare in classifica",
       "player": "Giocatore",
@@ -180,6 +182,7 @@
         ]
       ],
       "top_online": "Top 10 players",
+      "top_world": "Top 10 worldwide",
       "loading": "Loading…",
       "sign_in": "Sign in to join the leaderboard",
       "player": "Player",
@@ -564,37 +567,40 @@
   // --- Leaderboard ----------------------------------------------------------
   // Online on claude.ai: one document per player, scores/<user id> =
   // {score, level, at}; names are resolved from the id at render time, never
-  // stored. Anywhere else (e.g. GitHub Pages) it falls back to a local top 10
-  // in localStorage.
+  // stored. Anywhere else (GitHub Pages, the app) it is the global board of
+  // server/, with a local top 10 in localStorage while offline.
   const LOCAL_KEY = 'color-spin-top';
   const board = {
-    status: 'loading', // loading | ready (online) | local
-    rows: [],          // [{id, score, level, date?}] sorted, top TOP_SIZE
+    status: 'loading', // loading | ready (claude.ai) | global | local
+    rows: [],          // what the leaderboard shows, sorted, top TOP_SIZE
+    localRows: (() => { try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch { return []; } })(),
     names: {},
     myId: null, myBest: 0, db: null, user: null, writing: Promise.resolve(),
     localHighlight: -1, // row of the last local game, -1 = none
+    me: null,           // global board: {rank, name, score, level} of this device's player
   };
   function useLocalBoard() {
     board.status = 'local';
-    try { board.rows = JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch { board.rows = []; }
+    board.rows = board.localRows;
   }
   // Inserts this game into the local top list; returns its rank (0 = not ranked).
   function recordLocal(s, lvl) {
     board.localHighlight = -1;
     if (s <= 0) return 0;
     let i = 0;
-    while (i < board.rows.length && board.rows[i].score >= s) i++;
+    const rows = board.localRows;
+    while (i < rows.length && rows[i].score >= s) i++;
     if (i >= TOP_SIZE) return 0;
     const d = new Date(), pad = n => String(n).padStart(2, '0');
-    board.rows.splice(i, 0, { id: `local-${Date.now()}`, score: s, level: lvl, name: playerName,
+    rows.splice(i, 0, { id: `local-${Date.now()}`, score: s, level: lvl, name: playerName,
       date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` });
-    board.rows.length = Math.min(board.rows.length, TOP_SIZE);
+    rows.length = Math.min(rows.length, TOP_SIZE);
     saveLocalBoard();
     board.localHighlight = i;
     return i + 1;
   }
   function saveLocalBoard() {
-    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(board.rows)); } catch {}
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(board.localRows)); } catch {}
   }
 
   // --- Name field (local leaderboard only) ------------------------------------
@@ -605,7 +611,11 @@
   nameInput.addEventListener('input', () => {
     playerName = nameInput.value.trim();
     try { localStorage.setItem(NAME_KEY, playerName); } catch {}
-    if (board.localHighlight >= 0) { board.rows[board.localHighlight].name = playerName; saveLocalBoard(); }
+    if (board.localHighlight >= 0) { board.localRows[board.localHighlight].name = playerName; saveLocalBoard(); }
+    if (board.status === 'global') {
+      net.nameDirty = true;
+      clearTimeout(net.nameTimer); net.nameTimer = setTimeout(syncGlobal, 1200);
+    }
   });
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') nameInput.blur(); });
   function showNameInput() {
@@ -631,7 +641,7 @@
   async function initBoard() {
     const cl = window.claude;
     const [db, user] = cl && cl.use ? await Promise.all([cl.use('db'), cl.use('user')]) : [null, null];
-    if (!db) { useLocalBoard(); return; }
+    if (!db) { useLocalBoard(); refreshGlobal(); syncGlobal(); return; }
     board.db = db; board.user = user;
     board.myId = user ? await user.id() : null;
     if (board.myId) {
@@ -664,6 +674,84 @@
     if (board.status !== 'ready' || s <= 0) return 0;
     const better = board.rows.filter(r => r.id !== board.myId && r.score > s).length;
     return better < TOP_SIZE ? better + 1 : 0;
+  }
+
+  // --- Global leaderboard (server/) ---------------------------------------------
+  // Each device is an anonymous player with a random id; the server keeps its
+  // best game and its name. A game that could not be sent (offline) waits in
+  // localStorage and goes out with the next successful sync.
+  const SCORES_URL = 'https://color-spin-scores.beasy-policy-proxy.workers.dev/v1/scores';
+  const PLAYER_KEY = 'color-spin-player', PENDING_KEY = 'color-spin-pending';
+  const RETRY_GAP = 2500; // the server takes one write every 2 s per player
+  const net = {
+    player: (() => {
+      try {
+        let id = localStorage.getItem(PLAYER_KEY);
+        if (!/^[0-9a-f]{32}$/.test(id || '')) {
+          id = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+          localStorage.setItem(PLAYER_KEY, id);
+        }
+        return id;
+      } catch { return null; }
+    })(),
+    pending: (() => { try { return JSON.parse(localStorage.getItem(PENDING_KEY)); } catch { return null; } })(),
+    lastGame: null, nameDirty: false, nameTimer: 0, busy: false,
+  };
+  const savePending = () => {
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify(net.pending)); } catch {}
+  };
+  function applyGlobal(data) {
+    if (!data || !Array.isArray(data.top)) return;
+    board.status = 'global';
+    board.rows = data.top.map(r => ({ name: r.name, score: r.score, level: r.level, mine: !!r.you }));
+    board.me = data.me;
+  }
+  async function refreshGlobal() {
+    if (!net.player) return;
+    try {
+      const res = await fetch(`${SCORES_URL}?player=${net.player}`);
+      if (res.ok) applyGlobal(await res.json());
+    } catch {} // offline: the local board stays
+  }
+  // Queues a finished game for the global board (only if it beats the player's best).
+  function submitGlobal(s, lvl, duration) {
+    if (!net.player || s <= 0 || s <= (board.me?.score || 0) || s <= (net.pending?.score || 0)) return false;
+    net.pending = net.lastGame = { score: s, level: lvl, duration: Math.round(duration * 10) / 10 };
+    savePending();
+    syncGlobal();
+    return true;
+  }
+  // Sends the waiting game, or just the name when that changed.
+  async function syncGlobal() {
+    if (net.busy || !net.player) return;
+    const game = net.pending;
+    if (!game && !net.nameDirty) return;
+    net.busy = true; net.nameDirty = false;
+    let retry = false, offline = false;
+    try {
+      const res = await fetch(SCORES_URL, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player: net.player, name: playerName, ...(game || { score: 0, level: 1, duration: 0 }) }),
+      });
+      if (res.status === 429) { retry = true; if (!game) net.nameDirty = true; }
+      else {
+        if (res.ok) {
+          applyGlobal(await res.json());
+          if (game && game === net.lastGame && state === STATE.GAME_OVER && board.me) lastRank = board.me.rank;
+        }
+        // Sent, or refused by the server (it would be refused again): either way it's done.
+        if (res.ok || res.status < 500) { if (net.pending === game) { net.pending = null; savePending(); } }
+      }
+    } catch {
+      offline = true;
+      if (!game) net.nameDirty = true; // try again with the next game or launch
+    } finally {
+      net.busy = false;
+    }
+    // Rate limited, or a new game or name came in meanwhile.
+    if (retry || (!offline && ((net.pending && net.pending !== game) || net.nameDirty))) {
+      setTimeout(syncGlobal, RETRY_GAP);
+    }
   }
 
   // --- Effects --------------------------------------------------------------
@@ -714,7 +802,7 @@
   let lives = MAX_LIVES, level = 1, spawnTimer = 0, menuTurnTimer = 0;
   let shake = 0, flash = 0, fade = 0, scorePop = 0, banner = '', bannerTime = 0;
   let gameOverTime = 0, pauseTime = 0, resumeTimer = 0, time = 0, worldX = 0, worldY = 0;
-  let streak = 0, arrowFlash = [0, 0], lastRank = 0, lastGameImproved = false;
+  let streak = 0, arrowFlash = [0, 0], lastRank = 0, lastGameImproved = false, playTime = 0;
   let balls = [];
   let dots = [];
 
@@ -736,7 +824,7 @@
     hideNameInput();
     balls = []; clearFx();
     score = 0; lives = MAX_LIVES; level = 1; newBest = false; spawnTimer = 1;
-    streak = 0; lastRank = 0; lastGameImproved = false;
+    streak = 0; lastRank = 0; lastGameImproved = false; playTime = 0;
     state = STATE.PLAYING; fade = 1;
     shape.setup(sidesForLevel(level));
     music.playGame(level, tier(level));
@@ -820,13 +908,22 @@
     for (const b of balls) b.dead = true;
     for (const c of shape.colors) burst(0, 0, c, 10, 450);
     if (score > best) { best = score; newBest = true; saveBest(); }
-    if (board.status === 'local') {
-      lastRank = recordLocal(score, level);
-      if (lastRank > 0) showNameInput();
-    } else {
+    if (board.status === 'ready') {
       lastGameImproved = board.myId !== null && score > board.myBest;
       lastRank = lastGameImproved ? onlineRank(score) : 0;
       submitScore(score, level);
+      return;
+    }
+    // The local top 10 keeps every game, for when the device is offline.
+    const localRank = recordLocal(score, level);
+    const queued = submitGlobal(score, level, playTime);
+    if (board.status === 'global') {
+      // The global rank shows up when the server answers.
+      lastGameImproved = queued; lastRank = 0;
+      if (queued) showNameInput();
+    } else {
+      lastRank = localRank;
+      if (lastRank > 0) showNameInput();
     }
   }
 
@@ -871,6 +968,7 @@
       }
       else if (action === 'tap' && hit(menuButtons()[1], pos)) {
         sfx.play('click'); state = STATE.LEADERBOARD; fade = 0.6; refreshNames();
+        if (board.status === 'global' || board.status === 'local') { refreshGlobal(); syncGlobal(); }
       } else if (action === 'info' || (action === 'tap' && hit(infoButton(), pos))) {
         sfx.play('click'); state = STATE.ABOUT; fade = 0.6;
       } else if (action !== 'back') start();
@@ -1014,6 +1112,7 @@
       menuTurnTimer -= dt;
       if (menuTurnTimer <= 0) { shape.rotateStep(); menuTurnTimer = 0.9; }
     } else if (state === STATE.PLAYING) {
+      playTime += dt;
       spawnTimer -= dt;
       if (balls.length >= maxBalls()) spawnTimer = Math.max(spawnTimer, 0.4);
       else if (spawnTimer <= 0) { spawnBall(); spawnTimer = spawnInterval(); }
@@ -1216,28 +1315,36 @@
   function drawLeaderboard() {
     ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
     centered(tr('leaderboard'), H * 0.1, 60, WHITE);
-    const local = board.status === 'local';
-    centered(local ? tr('top_local') : tr('top_online'),
+    const local = board.status === 'local', global = board.status === 'global';
+    centered(tr(local ? 'top_local' : global ? 'top_world' : 'top_online'),
       H * 0.1 + 40, 20, WHITE, 0.5);
     if (board.status === 'loading') centered(tr('loading'), H * 0.4, 24, WHITE, 0.6);
     else if (!board.rows.length) centered(tr('no_scores'), H * 0.4, 24, WHITE, 0.6);
     const y0 = H * 0.17, w = W - 80;
-    board.rows.forEach((row, i) => {
-      const y = y0 + i * 66, mine = local ? i === board.localHighlight : row.id === board.myId;
+    const row = (y, rank, r, mine) => {
       ctx.fillStyle = mine ? rgba(PALETTE[2], 0.16) : 'rgba(255,255,255,0.05)';
       roundRect({ x: 40, y, w, h: 56 }, 14); ctx.fill();
-      circle(76, y + 28, 18, rgba(PALETTE[i % PALETTE.length]));
-      ctx.font = `800 22px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = rgba(INK); ctx.fillText(String(i + 1), 76, y + 29);
+      circle(76, y + 28, 18, rgba(PALETTE[(rank - 1) % PALETTE.length]));
+      ctx.font = `800 ${rank < 100 ? 22 : rank < 1000 ? 16 : 12}px ${FONT}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = rgba(INK); ctx.fillText(String(rank), 76, y + 29);
       // Local games saved before names existed, or left unnamed, show their date.
-      let name = local ? row.name || row.date : board.names[row.id] || tr('player');
+      let name = local ? r.name || r.date : (global ? r.name : board.names[r.id]) || tr('player');
       if (mine && !local) name += tr('you');
       ctx.font = `800 24px ${FONT}`;
       while (name.length > 3 && ctx.measureText(name).width > w - 250) name = name.slice(0, -2) + '…';
       text(112, y + 37, name, 24, WHITE);
-      text(40 + w - 120, y + 36, tr('row_level', row.level), 18, WHITE, 0.45, 'right');
-      text(40 + w - 22, y + 39, String(row.score), 30, WHITE, 1, 'right');
-    });
+      text(40 + w - 120, y + 36, tr('row_level', r.level), 18, WHITE, 0.45, 'right');
+      text(40 + w - 22, y + 39, String(r.score), 30, WHITE, 1, 'right');
+    };
+    board.rows.forEach((r, i) => row(y0 + i * 66, i + 1, r,
+      local ? i === board.localHighlight : global ? r.mine : r.id === board.myId));
+    // Outside the global top 10: the player's own place, under the list.
+    if (global && board.me && board.me.rank > board.rows.length) {
+      const y = y0 + board.rows.length * 66 + 10;
+      centered('···', y + 4, 24, WHITE, 0.4);
+      row(y + 20, board.me.rank, board.me, true);
+    }
     if (board.status === 'ready' && !board.myId) centered(tr('sign_in'), H * 0.84, 20, WHITE, 0.5);
     centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
   }

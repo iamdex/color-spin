@@ -1,0 +1,13 @@
+{
+  "name": "color-spin-scores",
+  "scripts": {
+    "dev": "wrangler dev",
+    "db:init:local": "wrangler d1 execute color-spin-scores --local --file schema.sql",
+    "db:init": "wrangler d1 execute color-spin-scores --remote --file schema.sql",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.141.0"
+  },
+  "private": true
+}
