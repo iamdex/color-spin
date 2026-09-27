@@ -1,13 +1,14 @@
 extends Node2D
 ## Game loop: main menu, spawns balls from the 4 screen edges, checks hits
 ## against the figure, tracks score / lives / level, handles input, pause,
-## game over, sound, the about screen and the local leaderboard.
+## game over, sound, the settings and about screens and the local leaderboard.
 
 const ShapeScript := preload("res://scripts/shape.gd")
 const BallScript := preload("res://scripts/ball.gd")
 const FxScript := preload("res://scripts/fx.gd")
 const SfxScript := preload("res://scripts/sfx.gd")
 const MusicScript := preload("res://scripts/music.gd")
+const Strings := preload("res://scripts/strings.gd")
 
 const PALETTE: Array[Color] = [
 	Color("#ff4d6d"), # red
@@ -28,27 +29,6 @@ const LEVELS_PER_SIDE := 3
 const MIN_SIDES := 3
 const MAX_SIDES := 8
 const MENU_SIDES := 6
-const ABOUT := [
-	["COME SI GIOCA", [
-		"Ruota la figura: ogni pallina deve",
-		"toccare il lato del suo colore.",
-		"Ogni 10 punti sali di livello.",
-		"Ogni 3 livelli arriva un lato in più",
-		"e recuperi una vita.",
-		"Dopo 5 errori la partita finisce.",
-	]],
-	["COMANDI", [
-		"Tocca a sinistra o a destra per ruotare",
-		"Tastiera: frecce oppure A e D",
-		"P o Esc pausa  ·  M musica  ·  S suoni",
-	]],
-	["CREDITI", [
-		"Un gioco di Davide Dex Espertini",
-		"Fatto con Godot 4: grafica e suoni",
-		"sono generati dal codice",
-		"github.com/iamdex/color-spin",
-	]],
-]
 const SPAWN_DIRS: Array[Vector2] = [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]
 const SAVE_PATH := "user://save.cfg"
 const DOT_COUNT := 40
@@ -58,7 +38,7 @@ const RESUME_BEAT := 0.5
 const NAME_MAX := 14
 const NAME_ROW := 84.0    # extra room the name field takes on the game over screen
 
-enum State { MENU, PLAYING, PAUSED, GAME_OVER, LEADERBOARD, ABOUT }
+enum State { MENU, PLAYING, PAUSED, GAME_OVER, LEADERBOARD, ABOUT, SETTINGS }
 
 var state := State.MENU
 var score := 0
@@ -84,6 +64,8 @@ var arrow_flash := [0.0, 0.0] # left, right: lights up the turn arrows on tap
 var top: Array[Dictionary] = [] # local leaderboard: {score, level, date, name}
 var last_rank := 0            # position of the last game in `top`, 0 = not ranked
 var player_name := ""         # last name typed, offered again for the next record
+var lang := "it"
+var link_rect := Rect2()      # the site link on the about screen, set when drawn
 
 var world: Node2D
 var shape: Node2D
@@ -131,8 +113,15 @@ func _ready() -> void:
 	for i in DOT_COUNT:
 		dots.append(Vector3(randf() * size.x, randf() * size.y, randf_range(1.0, 3.0)))
 
+	# Italian on Italian devices, English everywhere else, until the player picks.
+	lang = "it" if OS.get_locale_language() == "it" else "en"
 	_load()
+	name_edit.placeholder_text = _t("name_hint")
 	_go_to_menu()
+
+
+func _t(key: String) -> String:
+	return Strings.TEXT[lang][key]
 
 
 func _make_font() -> Font:
@@ -146,7 +135,6 @@ func _make_name_edit() -> LineEdit:
 	var e := LineEdit.new()
 	e.max_length = NAME_MAX
 	e.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	e.placeholder_text = "Scrivi il tuo nome"
 	e.select_all_on_focus = true
 	e.visible = false
 	e.add_theme_font_override("font", font)
@@ -214,7 +202,7 @@ func _start() -> void:
 	fade = 1.0
 	shape.setup(_sides_for_level(level), PALETTE)
 	music.play_game(level, _tier(level))
-	_show_banner("Livello 1")
+	_show_banner(_t("banner_level") % 1)
 
 
 func _clear_board() -> void:
@@ -243,6 +231,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				action = "pause"
 			KEY_I:
 				action = "info"
+			KEY_L:
+				action = "language"
 			KEY_M:
 				action = "music"
 			KEY_S:
@@ -256,13 +246,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if action == "effects":
 		_toggle_sound()
 		return
+	if action == "language":
+		_toggle_language()
+		return
 
 	match state:
 		State.MENU:
-			if action == "tap" and _sound_button().has_point(pos):
-				_toggle_sound()
-			elif action == "tap" and _music_button().has_point(pos):
-				_toggle_music()
+			if action == "tap" and _settings_button().has_point(pos):
+				sfx.play("click")
+				state = State.SETTINGS
+				fade = 0.6
 			elif action == "tap" and _menu_buttons()[1].has_point(pos):
 				sfx.play("click")
 				state = State.LEADERBOARD
@@ -318,6 +311,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif action == "back" or buttons[1].has_point(pos):
 				sfx.play("click")
 				_go_to_menu()
+		State.SETTINGS:
+			var rows := _settings_buttons()
+			if action == "tap" and rows[0].has_point(pos):
+				_toggle_music()
+			elif action == "tap" and rows[1].has_point(pos):
+				_toggle_sound()
+			elif action == "tap" and rows[2].has_point(pos):
+				_toggle_language()
+			elif action == "back" or (action == "tap" and rows[3].has_point(pos)):
+				sfx.play("click")
+				state = State.MENU
+				fade = 0.6
+		State.ABOUT when action == "tap" and link_rect.has_point(pos):
+			sfx.play("click")
+			OS.shell_open(Strings.SITE_URL)
 		State.LEADERBOARD, State.ABOUT:
 			# Any tap or key goes back: the whole screen is the "back" button.
 			sfx.play("click")
@@ -346,6 +354,13 @@ func _notification(what: int) -> void:
 		_pause()
 	elif state == State.PAUSED:
 		resume_timer = 0.0 # back to the pause menu instead of resuming unattended
+
+
+func _toggle_language() -> void:
+	lang = Strings.LANGS[(Strings.LANGS.find(lang) + 1) % Strings.LANGS.size()]
+	name_edit.placeholder_text = _t("name_hint")
+	sfx.play("click")
+	_save()
 
 
 func _toggle_music() -> void:
@@ -380,7 +395,7 @@ func _process(delta: float) -> void:
 	world.position = center + Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake
 
 	match state:
-		State.MENU, State.LEADERBOARD, State.ABOUT:
+		State.MENU, State.LEADERBOARD, State.ABOUT, State.SETTINGS:
 			menu_turn_timer -= delta
 			if menu_turn_timer <= 0.0:
 				shape.rotate_step()
@@ -502,11 +517,11 @@ func _level_up() -> void:
 		spawn_timer = 1.5
 		if lives < MAX_LIVES:
 			lives += 1
-			_show_banner("Livello %d  +1 vita" % level)
+			_show_banner(_t("banner_life") % level)
 			return
 	else:
 		sfx.play("level")
-	_show_banner("Livello %d" % level)
+	_show_banner(_t("banner_level") % level)
 
 
 func _game_over() -> void:
@@ -635,6 +650,8 @@ func _draw_hud() -> void:
 			_draw_leaderboard(size)
 		State.ABOUT:
 			_draw_about(size)
+		State.SETTINGS:
+			_draw_settings(size)
 	if flash > 0.0:
 		hud.draw_rect(Rect2(Vector2.ZERO, size), Color(1, 0.2, 0.2, 0.22 * flash))
 	if fade > 0.0:
@@ -660,20 +677,19 @@ func _draw_menu(size: Vector2) -> void:
 	_centered("SPIN", y + 100.0, title_size, Color.WHITE)
 
 	var cy := size.y / 2.0
-	_centered("Tocca a sinistra o a destra per ruotare", cy + 232.0, 24, Color(1, 1, 1, 0.85))
-	_centered("e abbina il colore delle palline", cy + 266.0, 22, Color(1, 1, 1, 0.5))
+	_centered(_t("tagline_1"), cy + 232.0, 24, Color(1, 1, 1, 0.85))
+	_centered(_t("tagline_2"), cy + 266.0, 22, Color(1, 1, 1, 0.5))
 
 	var buttons := _menu_buttons()
 	var pulse := 1.0 + sin(time * 4.0) * 0.03
 	var play := buttons[0]
 	play = play.grow_individual(play.size.x * (pulse - 1.0) / 2.0, play.size.y * (pulse - 1.0) / 2.0,
 			play.size.x * (pulse - 1.0) / 2.0, play.size.y * (pulse - 1.0) / 2.0)
-	_button(play, "GIOCA", PALETTE[2], INK)
-	_button(buttons[1], "CLASSIFICA", Color(1, 1, 1, 0.1), Color.WHITE)
+	_button(play, _t("play"), PALETTE[2], INK)
+	_button(buttons[1], _t("leaderboard"), Color(1, 1, 1, 0.1), Color.WHITE)
 	if best > 0:
-		_centered("RECORD  %d" % best, buttons[1].end.y + 52.0, 24, Color(1, 1, 1, 0.55))
-	_draw_sound_icon(_sound_button())
-	_draw_music_icon(_music_button())
+		_centered(_t("best") % best, buttons[1].end.y + 52.0, 24, Color(1, 1, 1, 0.55))
+	_draw_settings_icon(_settings_button())
 	_draw_info_icon(_info_button())
 
 
@@ -684,7 +700,7 @@ func _draw_play(size: Vector2) -> void:
 	hud.draw_rect(Rect2(0, 0, size.x * progress, 6), PALETTE[2])
 
 	_text(Vector2(28, 84), str(score), int(56 + 18 * score_pop), Color.WHITE)
-	_text(Vector2(30, 118), "LIVELLO %d" % level, 20, Color(1, 1, 1, 0.55))
+	_text(Vector2(30, 118), _t("hud_level") % level, 20, Color(1, 1, 1, 0.55))
 	for i in MAX_LIVES:
 		var p := Vector2(size.x - 36 - i * 34, 56)
 		if i < lives:
@@ -710,21 +726,21 @@ func _draw_game_over(size: Vector2) -> void:
 	var t := clampf(game_over_time * 3.0, 0.0, 1.0)
 	hud.draw_rect(Rect2(Vector2.ZERO, size), Color(BG_BOTTOM, 0.8 * t))
 	var slide := (1.0 - t) * 40.0
-	_centered("GAME OVER", size.y * 0.27 + slide, 68, Color(PALETTE[0], t))
+	_centered(_t("game_over"), size.y * 0.27 + slide, 68, Color(PALETTE[0], t))
 	_centered(str(score), size.y * 0.41 + slide, 130, Color(1, 1, 1, t))
-	_centered("PUNTI  ·  LIVELLO %d" % level, size.y * 0.41 + 44 + slide, 22, Color(1, 1, 1, 0.55 * t))
+	_centered(_t("points_level") % level, size.y * 0.41 + 44 + slide, 22, Color(1, 1, 1, 0.55 * t))
 	if new_best:
 		var s := int(34 + sin(time * 6.0) * 3.0)
-		_centered("NUOVO RECORD!", size.y * 0.52 + slide, s, Color(PALETTE[2], t))
+		_centered(_t("new_best"), size.y * 0.52 + slide, s, Color(PALETTE[2], t))
 	else:
-		_centered("RECORD  %d" % best, size.y * 0.52 + slide, 26, Color(1, 1, 1, 0.6 * t))
+		_centered(_t("best") % best, size.y * 0.52 + slide, 26, Color(1, 1, 1, 0.6 * t))
 	if last_rank > 0:
-		_centered("%d° IN CLASSIFICA" % last_rank, size.y * 0.52 + 44 + slide, 22, Color(1, 1, 1, 0.7 * t))
+		_centered(_t("rank") % last_rank, size.y * 0.52 + 44 + slide, 22, Color(1, 1, 1, 0.7 * t))
 
 	if game_over_time > 0.6:
 		var buttons := _game_over_buttons()
-		_button(buttons[0], "RIGIOCA", PALETTE[2], INK)
-		_button(buttons[1], "MENU", Color(1, 1, 1, 0.1), Color.WHITE)
+		_button(buttons[0], _t("replay"), PALETTE[2], INK)
+		_button(buttons[1], _t("menu"), Color(1, 1, 1, 0.1), Color.WHITE)
 
 
 func _draw_pause(size: Vector2) -> void:
@@ -738,12 +754,12 @@ func _draw_pause(size: Vector2) -> void:
 	var t := clampf(pause_time * 5.0, 0.0, 1.0)
 	hud.draw_rect(Rect2(Vector2.ZERO, size), Color(BG_BOTTOM, 0.8 * t))
 	var slide := (1.0 - t) * 30.0
-	_centered("PAUSA", size.y * 0.3 + slide, 68, Color(1, 1, 1, t))
-	_centered("%d PUNTI  ·  LIVELLO %d" % [score, level], size.y * 0.3 + 48 + slide, 22,
+	_centered(_t("paused"), size.y * 0.3 + slide, 68, Color(1, 1, 1, t))
+	_centered(_t("pause_stats") % [score, level], size.y * 0.3 + 48 + slide, 22,
 			Color(1, 1, 1, 0.55 * t))
 	var buttons := _pause_buttons()
-	_button(buttons[0], "RIPRENDI", PALETTE[2], INK)
-	_button(buttons[1], "MENU", Color(1, 1, 1, 0.1), Color.WHITE)
+	_button(buttons[0], _t("resume"), PALETTE[2], INK)
+	_button(buttons[1], _t("menu"), Color(1, 1, 1, 0.1), Color.WHITE)
 	var audio := _pause_audio_buttons()
 	_draw_music_icon(audio[0])
 	_draw_sound_icon(audio[1])
@@ -751,33 +767,53 @@ func _draw_pause(size: Vector2) -> void:
 
 func _draw_leaderboard(size: Vector2) -> void:
 	hud.draw_rect(Rect2(Vector2.ZERO, size), Color(BG_BOTTOM, 0.85))
-	_centered("CLASSIFICA", size.y * 0.1, 60, Color.WHITE)
-	_centered("I 10 migliori punteggi su questo dispositivo", size.y * 0.1 + 40, 20, Color(1, 1, 1, 0.5))
+	_centered(_t("leaderboard"), size.y * 0.1, 60, Color.WHITE)
+	_centered(_t("top_local"), size.y * 0.1 + 40, 20, Color(1, 1, 1, 0.5))
 	if top.is_empty():
-		_centered("Ancora nessun punteggio: gioca una partita!", size.y * 0.4, 24, Color(1, 1, 1, 0.6))
+		_centered(_t("no_scores"), size.y * 0.4, 24, Color(1, 1, 1, 0.6))
 	var rows: Array = []
 	for e in top:
 		# Games saved before names existed, or left unnamed, show their date.
 		var label := str(e.get("name", ""))
 		rows.append([label if label != "" else str(e["date"]), int(e["level"]), int(e["score"])])
 	_draw_rows(size, rows, last_rank - 1)
-	_centered("Tocca per tornare al menu", size.y * 0.9, 22, Color(1, 1, 1, 0.5))
+	_centered(_t("tap_back"), size.y * 0.9, 22, Color(1, 1, 1, 0.5))
 
 
 func _draw_about(size: Vector2) -> void:
 	hud.draw_rect(Rect2(Vector2.ZERO, size), Color(BG_BOTTOM, 0.85))
 	_centered("COLOR SPIN", size.y * 0.1, 60, Color.WHITE)
-	_centered("Versione %s" % ProjectSettings.get_setting("application/config/version", "1.0"),
+	_centered(_t("version") % ProjectSettings.get_setting("application/config/version", "1.0"),
 			size.y * 0.1 + 40, 20, Color(1, 1, 1, 0.5))
 	var y := size.y * 0.2
-	for section in ABOUT:
+	for section in Strings.TEXT[lang]["about"]:
 		_centered(section[0], y, 26, PALETTE[2])
 		y += 44.0
 		for line in section[1]:
 			_centered(line, y, 22, Color(1, 1, 1, 0.8))
 			y += 34.0
 		y += 30.0
-	_centered("Tocca per tornare al menu", size.y * 0.9, 22, Color(1, 1, 1, 0.5))
+	# The site link, right under the credits: underlined, and tappable.
+	y -= 30.0
+	var w := font.get_string_size(Strings.SITE_LABEL, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x
+	_centered(Strings.SITE_LABEL, y, 24, PALETTE[1])
+	hud.draw_line(Vector2((size.x - w) / 2.0, y + 6), Vector2((size.x + w) / 2.0, y + 6), PALETTE[1], 2.0)
+	link_rect = Rect2((size.x - w) / 2.0 - 20, y - 34, w + 40, 56)
+	_centered(_t("tap_back"), size.y * 0.9, 22, Color(1, 1, 1, 0.5))
+
+
+func _draw_settings(size: Vector2) -> void:
+	hud.draw_rect(Rect2(Vector2.ZERO, size), Color(BG_BOTTOM, 0.85))
+	_centered(_t("settings"), size.y * 0.2, 60, Color.WHITE)
+	var rows := _settings_buttons()
+	var values := [
+		[_t("music"), _t("off") if music.muted else _t("on")],
+		[_t("sounds"), _t("off") if sfx.muted else _t("on")],
+		[_t("language"), _t("lang_name")],
+	]
+	for i in values.size():
+		_button(rows[i], "%s:  %s" % values[i], Color(1, 1, 1, 0.1), Color.WHITE)
+	_button(rows[3], _t("back"), PALETTE[2], INK)
 
 
 ## rows: [label, level, score]; `highlight` is the row index to mark (-1 = none).
@@ -796,7 +832,7 @@ func _draw_rows(size: Vector2, rows: Array, highlight: int) -> void:
 		hud.draw_circle(c, 18, PALETTE[i % PALETTE.size()])
 		hud.draw_string(font, Vector2(c.x - 20, y + 36), str(i + 1), HORIZONTAL_ALIGNMENT_CENTER, 40, 22, INK)
 		_text(Vector2(112, y + 37), rows[i][0], 24, Color.WHITE)
-		_text(Vector2(40, y + 36), "liv. %d" % rows[i][1], 18, Color(1, 1, 1, 0.45),
+		_text(Vector2(40, y + 36), _t("row_level") % rows[i][1], 18, Color(1, 1, 1, 0.45),
 				HORIZONTAL_ALIGNMENT_RIGHT, w - 120)
 		_text(Vector2(40, y + 39), str(rows[i][2]), 30, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT, w - 22)
 
@@ -838,6 +874,17 @@ func _draw_info_icon(rect: Rect2) -> void:
 	hud.draw_line(c + Vector2(0, -2), c + Vector2(0, 9), col, 4.0, true)
 
 
+## A cog: eight teeth around a ring.
+func _draw_settings_icon(rect: Rect2) -> void:
+	var c := rect.get_center()
+	var col := Color(1, 1, 1, 0.75)
+	for i in 8:
+		var d := Vector2.from_angle(i * TAU / 8.0)
+		hud.draw_line(c + d * 10.0, c + d * 19.0, col, 7.0)
+	hud.draw_circle(c, 14.0, col)
+	hud.draw_circle(c, 6.0, BG_TOP)
+
+
 ## Two beamed eighth notes, crossed out when the music is off.
 func _draw_music_icon(rect: Rect2) -> void:
 	var c := rect.get_center()
@@ -874,12 +921,17 @@ func _menu_buttons() -> Array[Rect2]:
 	]
 
 
-func _sound_button() -> Rect2:
+func _settings_button() -> Rect2:
 	return Rect2(hud.size.x - 92, 24, 68, 68)
 
 
-func _music_button() -> Rect2:
-	return Rect2(hud.size.x - 168, 24, 68, 68)
+## Music, sounds, language, back.
+func _settings_buttons() -> Array[Rect2]:
+	var size := hud.size
+	var rects: Array[Rect2] = []
+	for i in 4:
+		rects.append(Rect2(size.x / 2.0 - 260, size.y * 0.3 + i * 104 + (40 if i == 3 else 0), 520, 84))
+	return rects
 
 
 func _info_button() -> Rect2:
@@ -958,6 +1010,7 @@ func _load() -> void:
 	sfx.muted = cfg.get_value("settings", "muted", false)
 	music.muted = cfg.get_value("settings", "music_muted", false)
 	player_name = cfg.get_value("settings", "name", "")
+	lang = cfg.get_value("settings", "lang", lang)
 	top.clear()
 	for e in cfg.get_value("score", "top", []):
 		if e is Dictionary:
@@ -971,4 +1024,5 @@ func _save() -> void:
 	cfg.set_value("settings", "muted", sfx.muted)
 	cfg.set_value("settings", "music_muted", music.muted)
 	cfg.set_value("settings", "name", player_name)
+	cfg.set_value("settings", "lang", lang)
 	cfg.save(SAVE_PATH)

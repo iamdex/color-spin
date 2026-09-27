@@ -18,8 +18,8 @@
   #name:focus { border-color: #ffd43b; }
 </style>
 
-<canvas id="game" tabindex="0" aria-label="Color Spin. Tocca a sinistra o a destra, oppure usa le frecce, per ruotare la figura. P o Esc per la pausa, M per la musica, S per i suoni, I per le informazioni."></canvas>
-<input id="name" maxlength="14" autocomplete="nickname" enterkeyhint="done" placeholder="Scrivi il tuo nome" aria-label="Il tuo nome in classifica">
+<canvas id="game" tabindex="0"></canvas>
+<input id="name" maxlength="14" autocomplete="nickname" enterkeyhint="done">
 
 <script>
 (() => {
@@ -42,31 +42,158 @@
   const SHAPE_RADIUS = 120, TURN_TIME = 0.12;
   const BALL_RADIUS = 16, TRAIL_LEN = 12;
   const FONT = 'Montserrat, "Arial Black", Arial, sans-serif';
-  const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5 };
+  const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6 };
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
   const VERSION = '1.1';
+  const SITE_URL = 'https://espertini.com', SITE_LABEL = 'espertini.com', LANG_KEY = 'color-spin-lang';
+  // Same table as scripts/strings.gd (generated from it), plus the web-only
+  // texts of the online leaderboard and the accessibility labels.
+  const TEXT = {
+    "it": {
+      "lang_name": "ITALIANO",
+      "tagline_1": "Tocca a sinistra o a destra per ruotare",
+      "tagline_2": "e abbina il colore delle palline",
+      "play": "GIOCA",
+      "leaderboard": "CLASSIFICA",
+      "best": "RECORD  %d",
+      "hud_level": "LIVELLO %d",
+      "banner_level": "Livello %d",
+      "banner_life": "Livello %d  +1 vita",
+      "game_over": "GAME OVER",
+      "points_level": "PUNTI  ·  LIVELLO %d",
+      "new_best": "NUOVO RECORD!",
+      "rank": "%d° IN CLASSIFICA",
+      "replay": "RIGIOCA",
+      "menu": "MENU",
+      "paused": "PAUSA",
+      "pause_stats": "%d PUNTI  ·  LIVELLO %d",
+      "resume": "RIPRENDI",
+      "top_local": "I 10 migliori punteggi su questo dispositivo",
+      "no_scores": "Ancora nessun punteggio: gioca una partita!",
+      "tap_back": "Tocca per tornare al menu",
+      "version": "Versione %s",
+      "row_level": "liv. %d",
+      "name_hint": "Scrivi il tuo nome",
+      "settings": "IMPOSTAZIONI",
+      "music": "MUSICA",
+      "sounds": "SUONI",
+      "language": "LINGUA",
+      "on": "SÌ",
+      "off": "NO",
+      "back": "INDIETRO",
+      "about": [
+        [
+          "COME SI GIOCA",
+          [
+            "Ruota la figura: ogni pallina deve",
+            "toccare il lato del suo colore.",
+            "Ogni 10 punti sali di livello.",
+            "Ogni 3 livelli arriva un lato in più",
+            "e recuperi una vita.",
+            "Dopo 5 errori la partita finisce."
+          ]
+        ],
+        [
+          "COMANDI",
+          [
+            "Tocca a sinistra o a destra per ruotare",
+            "Tastiera: frecce oppure A e D",
+            "P o Esc pausa  ·  M musica  ·  S suoni"
+          ]
+        ],
+        [
+          "CREDITI",
+          [
+            "Un gioco di Davide Dex Espertini",
+            "Fatto con Godot 4: grafica, suoni",
+            "e musica sono generati dal codice"
+          ]
+        ]
+      ],
+      "top_online": "I 10 migliori giocatori",
+      "loading": "Caricamento…",
+      "sign_in": "Accedi per entrare in classifica",
+      "player": "Giocatore",
+      "you": " (tu)",
+      "name_label": "Il tuo nome in classifica",
+      "aria": "Color Spin. Tocca a sinistra o a destra, oppure usa le frecce, per ruotare la figura. P o Esc per la pausa, M per la musica, S per i suoni, L per la lingua, I per le informazioni."
+    },
+    "en": {
+      "lang_name": "ENGLISH",
+      "tagline_1": "Tap left or right to spin",
+      "tagline_2": "and match the color of the balls",
+      "play": "PLAY",
+      "leaderboard": "LEADERBOARD",
+      "best": "BEST  %d",
+      "hud_level": "LEVEL %d",
+      "banner_level": "Level %d",
+      "banner_life": "Level %d  +1 life",
+      "game_over": "GAME OVER",
+      "points_level": "POINTS  ·  LEVEL %d",
+      "new_best": "NEW BEST!",
+      "rank": "RANKED #%d",
+      "replay": "PLAY AGAIN",
+      "menu": "MENU",
+      "paused": "PAUSED",
+      "pause_stats": "%d POINTS  ·  LEVEL %d",
+      "resume": "RESUME",
+      "top_local": "Top 10 scores on this device",
+      "no_scores": "No scores yet: play a game!",
+      "tap_back": "Tap to go back to the menu",
+      "version": "Version %s",
+      "row_level": "lv. %d",
+      "name_hint": "Type your name",
+      "settings": "SETTINGS",
+      "music": "MUSIC",
+      "sounds": "SOUNDS",
+      "language": "LANGUAGE",
+      "on": "ON",
+      "off": "OFF",
+      "back": "BACK",
+      "about": [
+        [
+          "HOW TO PLAY",
+          [
+            "Spin the shape so every ball",
+            "hits the side of its own color.",
+            "Every 10 points you level up.",
+            "Every 3 levels the shape gains a side",
+            "and you get a life back.",
+            "After 5 misses the game is over."
+          ]
+        ],
+        [
+          "CONTROLS",
+          [
+            "Tap left or right to spin",
+            "Keyboard: arrows or A and D",
+            "P or Esc pause  ·  M music  ·  S sounds"
+          ]
+        ],
+        [
+          "CREDITS",
+          [
+            "A game by Davide Dex Espertini",
+            "Made with Godot 4: graphics, sounds",
+            "and music are generated in code"
+          ]
+        ]
+      ],
+      "top_online": "Top 10 players",
+      "loading": "Loading…",
+      "sign_in": "Sign in to join the leaderboard",
+      "player": "Player",
+      "you": " (you)",
+      "name_label": "Your name on the leaderboard",
+      "aria": "Color Spin. Tap left or right, or use the arrow keys, to spin the shape. P or Esc to pause, M for music, S for sounds, L for language, I for info."
+    }
+  };
+  const LANGS = Object.keys(TEXT);
+  // Italian for Italian browsers, English everywhere else, until the player picks.
+  let lang = (() => { try { return localStorage.getItem(LANG_KEY); } catch { return null; } })();
+  if (!TEXT[lang]) lang = (navigator.language || '').toLowerCase().startsWith('it') ? 'it' : 'en';
+  const tr = (key, ...args) => { let i = 0; return TEXT[lang][key].replace(/%[ds]/g, () => args[i++]); };
   const NAME_ROW = 84; // extra room the name field takes on the game over screen
-  const ABOUT = [
-    ['COME SI GIOCA', [
-      'Ruota la figura: ogni pallina deve',
-      'toccare il lato del suo colore.',
-      'Ogni 10 punti sali di livello.',
-      'Ogni 3 livelli arriva un lato in più',
-      'e recuperi una vita.',
-      'Dopo 5 errori la partita finisce.',
-    ]],
-    ['COMANDI', [
-      'Tocca a sinistra o a destra per ruotare',
-      'Tastiera: frecce oppure A e D',
-      'P o Esc pausa  ·  M musica  ·  S suoni',
-    ]],
-    ['CREDITI', [
-      'Un gioco di Davide Dex Espertini',
-      'Fatto con Godot 4: grafica e suoni',
-      'sono generati dal codice',
-      'github.com/iamdex/color-spin',
-    ]],
-  ];
   const TOP_SIZE = 10;
   const RESUME_BEATS = 3, RESUME_BEAT = 0.5; // "3, 2, 1" countdown before play resumes
 
@@ -252,6 +379,19 @@
   function toggleSound() {
     sfx.muted = !sfx.muted;
     try { localStorage.setItem(MUTE_KEY, sfx.muted ? '1' : '0'); } catch {}
+    sfx.play('click');
+  }
+
+  function applyLanguage() {
+    document.documentElement.lang = lang;
+    canvas.setAttribute('aria-label', tr('aria'));
+    nameInput.placeholder = tr('name_hint');
+    nameInput.setAttribute('aria-label', tr('name_label'));
+  }
+  function toggleLanguage() {
+    lang = LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length];
+    try { localStorage.setItem(LANG_KEY, lang); } catch {}
+    applyLanguage();
     sfx.play('click');
   }
 
@@ -600,7 +740,7 @@
     state = STATE.PLAYING; fade = 1;
     shape.setup(sidesForLevel(level));
     music.playGame(level, tier(level));
-    showBanner('Livello 1');
+    showBanner(tr('banner_level', 1));
   }
 
   const tier = lvl => Math.min(Math.floor((lvl - 1) / LEVELS_PER_SIDE), MAX_SIDES - MIN_SIDES);
@@ -662,11 +802,11 @@
       ring(0, 0, WHITE, 60, 450, 0.6);
       for (const c of shape.colors) burst(0, 0, c, 6, 420);
       spawnTimer = 1.5;
-      if (lives < MAX_LIVES) { lives++; showBanner(`Livello ${level}  +1 vita`); return; }
+      if (lives < MAX_LIVES) { lives++; showBanner(tr('banner_life', level)); return; }
     } else {
       sfx.play('level');
     }
-    showBanner(`Livello ${level}`);
+    showBanner(tr('banner_level', level));
   }
 
   function pause() {
@@ -695,7 +835,11 @@
     { x: W / 2 - 160, y: H * 0.77 - 48, w: 320, h: 96 },
     { x: W / 2 - 150, y: H * 0.77 + 64, w: 300, h: 88 },
   ];
-  const soundButton = () => ({ x: W - 92, y: 24, w: 68, h: 68 });
+  const settingsButton = () => ({ x: W - 92, y: 24, w: 68, h: 68 });
+  // Music, sounds, language, back.
+  const settingsButtons = () => [0, 1, 2, 3].map(i =>
+    ({ x: W / 2 - 260, y: H * 0.3 + i * 104 + (i === 3 ? 40 : 0), w: 520, h: 84 }));
+  let linkRect = { x: 0, y: 0, w: 0, h: 0 }; // the site link on the about screen, set when drawn
   const infoButton = () => ({ x: 24, y: 24, w: 68, h: 68 });
   // Top center, between the score and the lives.
   const pauseButton = () => ({ x: W / 2 - 34, y: 22, w: 68, h: 68 });
@@ -708,7 +852,7 @@
     { x: W / 2 - 84, y: H * 0.45 + 232, w: 68, h: 68 },
     { x: W / 2 + 16, y: H * 0.45 + 232, w: 68, h: 68 },
   ];
-  const musicButton = () => ({ x: W - 168, y: 24, w: 68, h: 68 });
+
   const grow = (r, k) => ({ x: r.x - k, y: r.y - k, w: r.w + 2 * k, h: r.h + 2 * k });
   const gameOverButtons = () => {
     const y = H * 0.62 + (nameShown ? NAME_ROW : 0);
@@ -720,9 +864,11 @@
     sfx.unlock();
     if (action === 'music') { toggleMusic(); return; }
     if (action === 'effects') { toggleSound(); return; }
+    if (action === 'language') { toggleLanguage(); return; }
     if (state === STATE.MENU) {
-      if (action === 'tap' && hit(soundButton(), pos)) toggleSound();
-      else if (action === 'tap' && hit(musicButton(), pos)) toggleMusic();
+      if (action === 'tap' && hit(settingsButton(), pos)) {
+        sfx.play('click'); state = STATE.SETTINGS; fade = 0.6;
+      }
       else if (action === 'tap' && hit(menuButtons()[1], pos)) {
         sfx.play('click'); state = STATE.LEADERBOARD; fade = 0.6; refreshNames();
       } else if (action === 'info' || (action === 'tap' && hit(infoButton(), pos))) {
@@ -758,6 +904,16 @@
       const b = gameOverButtons();
       if (action === 'confirm' || hit(b[0], pos)) { sfx.play('click'); start(); }
       else if (action === 'back' || hit(b[1], pos)) { sfx.play('click'); goToMenu(); }
+    } else if (state === STATE.SETTINGS) {
+      const rows = settingsButtons();
+      if (action === 'tap' && hit(rows[0], pos)) toggleMusic();
+      else if (action === 'tap' && hit(rows[1], pos)) toggleSound();
+      else if (action === 'tap' && hit(rows[2], pos)) toggleLanguage();
+      else if (action === 'back' || (action === 'tap' && hit(rows[3], pos))) {
+        sfx.play('click'); state = STATE.MENU; fade = 0.6;
+      }
+    } else if (state === STATE.ABOUT && action === 'tap' && hit(linkRect, pos)) {
+      sfx.play('click'); window.open(SITE_URL, '_blank', 'noopener');
     } else {
       // Any tap or key goes back: the whole screen is the "back" button.
       sfx.play('click'); state = STATE.MENU; fade = 0.6;
@@ -774,7 +930,7 @@
   const KEYS = {
     ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right',
     ' ': 'confirm', Enter: 'confirm', ArrowUp: 'confirm', Escape: 'back', m: 'music', M: 'music', s: 'effects', S: 'effects',
-    p: 'pause', P: 'pause', i: 'info', I: 'info',
+    p: 'pause', P: 'pause', i: 'info', I: 'info', l: 'language', L: 'language',
   };
   window.addEventListener('keydown', e => {
     if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || !KEYS[e.key] || e.target === nameInput) return;
@@ -833,7 +989,7 @@
     }
     updateFx(dt);
 
-    if (state === STATE.MENU || state === STATE.LEADERBOARD || state === STATE.ABOUT) {
+    if ([STATE.MENU, STATE.LEADERBOARD, STATE.ABOUT, STATE.SETTINGS].includes(state)) {
       menuTurnTimer -= dt;
       if (menuTurnTimer <= 0) { shape.rotateStep(); menuTurnTimer = 0.9; }
     } else if (state === STATE.PLAYING) {
@@ -945,16 +1101,15 @@
     centered('SPIN', y + 100, size, WHITE);
 
     const cy = H / 2;
-    centered('Tocca a sinistra o a destra per ruotare', cy + 232, 24, WHITE, 0.85);
-    centered('e abbina il colore delle palline', cy + 266, 22, WHITE, 0.5);
+    centered(tr('tagline_1'), cy + 232, 24, WHITE, 0.85);
+    centered(tr('tagline_2'), cy + 266, 22, WHITE, 0.5);
 
     const [r, lb] = menuButtons(), p = 1 + Math.sin(time * 4) * 0.03;
     const grown = { x: r.x - r.w * (p - 1) / 2, y: r.y - r.h * (p - 1) / 2, w: r.w * p, h: r.h * p };
-    button(grown, 'GIOCA', PALETTE[2], 1, INK);
-    button(lb, 'CLASSIFICA', WHITE, 0.1, WHITE);
-    if (best > 0) centered(`RECORD  ${best}`, lb.y + lb.h + 52, 24, WHITE, 0.55);
-    drawSoundIcon(soundButton());
-    drawMusicIcon(musicButton());
+    button(grown, tr('play'), PALETTE[2], 1, INK);
+    button(lb, tr('leaderboard'), WHITE, 0.1, WHITE);
+    if (best > 0) centered(tr('best', best), lb.y + lb.h + 52, 24, WHITE, 0.55);
+    drawSettingsIcon(settingsButton());
     drawInfoIcon(infoButton());
   }
 
@@ -992,6 +1147,20 @@
     ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(cx, cy - 2); ctx.lineTo(cx, cy + 9); ctx.stroke();
   }
 
+  // A cog: eight teeth around a ring.
+  function drawSettingsIcon(r) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2, col = 'rgba(255,255,255,0.75)';
+    ctx.strokeStyle = col; ctx.lineWidth = 7; ctx.lineCap = 'butt';
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = i * TAU / 8;
+      ctx.moveTo(cx + Math.cos(a) * 10, cy + Math.sin(a) * 10); ctx.lineTo(cx + Math.cos(a) * 19, cy + Math.sin(a) * 19);
+    }
+    ctx.stroke();
+    circle(cx, cy, 14, col);
+    circle(cx, cy, 6, rgba(BG_TOP));
+  }
+
   // Two beamed eighth notes, crossed out when the music is off.
   function drawMusicIcon(r) {
     const cx = r.x + r.w / 2, cy = r.y + r.h / 2, col = 'rgba(255,255,255,0.75)';
@@ -1025,12 +1194,12 @@
 
   function drawLeaderboard() {
     ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
-    centered('CLASSIFICA', H * 0.1, 60, WHITE);
+    centered(tr('leaderboard'), H * 0.1, 60, WHITE);
     const local = board.status === 'local';
-    centered(local ? 'I 10 migliori punteggi su questo dispositivo' : 'I 10 migliori giocatori',
+    centered(local ? tr('top_local') : tr('top_online'),
       H * 0.1 + 40, 20, WHITE, 0.5);
-    if (board.status === 'loading') centered('Caricamento…', H * 0.4, 24, WHITE, 0.6);
-    else if (!board.rows.length) centered('Ancora nessun punteggio: gioca una partita!', H * 0.4, 24, WHITE, 0.6);
+    if (board.status === 'loading') centered(tr('loading'), H * 0.4, 24, WHITE, 0.6);
+    else if (!board.rows.length) centered(tr('no_scores'), H * 0.4, 24, WHITE, 0.6);
     const y0 = H * 0.17, w = W - 80;
     board.rows.forEach((row, i) => {
       const y = y0 + i * 66, mine = local ? i === board.localHighlight : row.id === board.myId;
@@ -1040,30 +1209,50 @@
       ctx.font = `800 22px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = rgba(INK); ctx.fillText(String(i + 1), 76, y + 29);
       // Local games saved before names existed, or left unnamed, show their date.
-      let name = local ? row.name || row.date : board.names[row.id] || 'Giocatore';
-      if (mine && !local) name += ' (tu)';
+      let name = local ? row.name || row.date : board.names[row.id] || tr('player');
+      if (mine && !local) name += tr('you');
       ctx.font = `800 24px ${FONT}`;
       while (name.length > 3 && ctx.measureText(name).width > w - 250) name = name.slice(0, -2) + '…';
       text(112, y + 37, name, 24, WHITE);
-      text(40 + w - 120, y + 36, `liv. ${row.level}`, 18, WHITE, 0.45, 'right');
+      text(40 + w - 120, y + 36, tr('row_level', row.level), 18, WHITE, 0.45, 'right');
       text(40 + w - 22, y + 39, String(row.score), 30, WHITE, 1, 'right');
     });
-    if (board.status === 'ready' && !board.myId) centered('Accedi per entrare in classifica', H * 0.84, 20, WHITE, 0.5);
-    centered('Tocca per tornare al menu', H * 0.9, 22, WHITE, 0.5);
+    if (board.status === 'ready' && !board.myId) centered(tr('sign_in'), H * 0.84, 20, WHITE, 0.5);
+    centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
   }
 
   function drawAbout() {
     ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
     centered('COLOR SPIN', H * 0.1, 60, WHITE);
-    centered(`Versione ${VERSION}`, H * 0.1 + 40, 20, WHITE, 0.5);
+    centered(tr('version', VERSION), H * 0.1 + 40, 20, WHITE, 0.5);
     let y = H * 0.2;
-    for (const [title, lines] of ABOUT) {
+    for (const [title, lines] of TEXT[lang].about) {
       centered(title, y, 26, PALETTE[2]);
       y += 44;
       for (const line of lines) { centered(line, y, 22, WHITE, 0.8); y += 34; }
       y += 30;
     }
-    centered('Tocca per tornare al menu', H * 0.9, 22, WHITE, 0.5);
+    // The site link, right under the credits: underlined, and tappable.
+    y -= 30;
+    ctx.font = `800 24px ${FONT}`;
+    const w = ctx.measureText(SITE_LABEL).width;
+    centered(SITE_LABEL, y, 24, PALETTE[1]);
+    ctx.fillStyle = rgba(PALETTE[1]); ctx.fillRect((W - w) / 2, y + 5, w, 2);
+    linkRect = { x: (W - w) / 2 - 20, y: y - 34, w: w + 40, h: 56 };
+    centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
+  }
+
+  function drawSettings() {
+    ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
+    centered(tr('settings'), H * 0.2, 60, WHITE);
+    const rows = settingsButtons();
+    const values = [
+      [tr('music'), music.muted ? tr('off') : tr('on')],
+      [tr('sounds'), sfx.muted ? tr('off') : tr('on')],
+      [tr('language'), tr('lang_name')],
+    ];
+    values.forEach(([k, v], i) => button(rows[i], `${k}:  ${v}`, WHITE, 0.1, WHITE));
+    button(rows[3], tr('back'), PALETTE[2], 1, INK);
   }
 
   function drawPlay() {
@@ -1072,7 +1261,7 @@
     ctx.fillRect(0, 0, W * (score % POINTS_PER_LEVEL) / POINTS_PER_LEVEL, 6);
 
     text(28, 84, String(score), 56 + 18 * scorePop, WHITE);
-    text(30, 118, `LIVELLO ${level}`, 20, WHITE, 0.55);
+    text(30, 118, tr('hud_level', level), 20, WHITE, 0.55);
     for (let i = 0; i < MAX_LIVES; i++) {
       const x = W - 36 - i * 34, y = 56;
       if (i < lives) {
@@ -1106,11 +1295,11 @@
     const t = clamp(pauseTime * 5, 0, 1);
     ctx.fillStyle = rgba(BG_BOTTOM, 0.8 * t); ctx.fillRect(0, 0, W, H);
     const slide = (1 - t) * 30;
-    centered('PAUSA', H * 0.3 + slide, 68, WHITE, t);
-    centered(`${score} PUNTI  ·  LIVELLO ${level}`, H * 0.3 + 48 + slide, 22, WHITE, 0.55 * t);
+    centered(tr('paused'), H * 0.3 + slide, 68, WHITE, t);
+    centered(tr('pause_stats', score, level), H * 0.3 + 48 + slide, 22, WHITE, 0.55 * t);
     const b = pauseButtons();
-    button(b[0], 'RIPRENDI', PALETTE[2], 1, INK);
-    button(b[1], 'MENU', WHITE, 0.1, WHITE);
+    button(b[0], tr('resume'), PALETTE[2], 1, INK);
+    button(b[1], tr('menu'), WHITE, 0.1, WHITE);
     const audio = pauseAudioButtons();
     drawMusicIcon(audio[0]);
     drawSoundIcon(audio[1]);
@@ -1120,19 +1309,19 @@
     const t = clamp(gameOverTime * 3, 0, 1);
     ctx.fillStyle = rgba(BG_BOTTOM, 0.8 * t); ctx.fillRect(0, 0, W, H);
     const slide = (1 - t) * 40;
-    centered('GAME OVER', H * 0.27 + slide, 68, PALETTE[0], t);
+    centered(tr('game_over'), H * 0.27 + slide, 68, PALETTE[0], t);
     centered(String(score), H * 0.41 + slide, 130, WHITE, t);
-    centered(`PUNTI  ·  LIVELLO ${level}`, H * 0.41 + 44 + slide, 22, WHITE, 0.55 * t);
-    if (newBest) centered('NUOVO RECORD!', H * 0.52 + slide, 34 + Math.sin(time * 6) * 3, PALETTE[2], t);
-    else centered(`RECORD  ${best}`, H * 0.52 + slide, 26, WHITE, 0.6 * t);
-    if (lastRank > 0) centered(`${lastRank}° IN CLASSIFICA`, H * 0.52 + 44 + slide, 22, WHITE, 0.7 * t);
+    centered(tr('points_level', level), H * 0.41 + 44 + slide, 22, WHITE, 0.55 * t);
+    if (newBest) centered(tr('new_best'), H * 0.52 + slide, 34 + Math.sin(time * 6) * 3, PALETTE[2], t);
+    else centered(tr('best', best), H * 0.52 + slide, 26, WHITE, 0.6 * t);
+    if (lastRank > 0) centered(tr('rank', lastRank), H * 0.52 + 44 + slide, 22, WHITE, 0.7 * t);
     else if (score > 0 && board.status === 'ready' && !board.myId)
-      centered('Accedi per entrare in classifica', H * 0.52 + 44 + slide, 20, WHITE, 0.5 * t);
+      centered(tr('sign_in'), H * 0.52 + 44 + slide, 20, WHITE, 0.5 * t);
     if (nameShown) placeNameInput(t);
     if (gameOverTime > 0.6) {
       const b = gameOverButtons();
-      button(b[0], 'RIGIOCA', PALETTE[2], 1, INK);
-      button(b[1], 'MENU', WHITE, 0.1, WHITE);
+      button(b[0], tr('replay'), PALETTE[2], 1, INK);
+      button(b[1], tr('menu'), WHITE, 0.1, WHITE);
     }
   }
 
@@ -1145,6 +1334,7 @@
     if (state === STATE.MENU) drawMenu();
     else if (state === STATE.LEADERBOARD) drawLeaderboard();
     else if (state === STATE.ABOUT) drawAbout();
+    else if (state === STATE.SETTINGS) drawSettings();
     else {
       drawPlay();
       if (state === STATE.PAUSED) drawPause();
@@ -1164,6 +1354,7 @@
     requestAnimationFrame(frame);
   }
 
+  applyLanguage();
   goToMenu();
   requestAnimationFrame(frame);
   initBoard();
