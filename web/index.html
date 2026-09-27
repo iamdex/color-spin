@@ -10,15 +10,23 @@
            user-select: none; -webkit-user-select: none; }
   canvas:focus { outline: none; }
   canvas:focus-visible { outline: 2px solid #ffd43b; outline-offset: -2px; }
+  #name { position: fixed; display: none; box-sizing: border-box; margin: 0; text-align: center;
+          font-family: Montserrat, "Arial Black", Arial, sans-serif; font-weight: 800; color: #fff;
+          background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.3);
+          outline: none; caret-color: #ffd43b; }
+  #name::placeholder { color: rgba(255,255,255,0.4); }
+  #name:focus { border-color: #ffd43b; }
 </style>
 
-<canvas id="game" tabindex="0" aria-label="Color Spin. Tocca a sinistra o a destra, oppure usa le frecce, per ruotare la figura. P o Esc per la pausa."></canvas>
+<canvas id="game" tabindex="0" aria-label="Color Spin. Tocca a sinistra o a destra, oppure usa le frecce, per ruotare la figura. P o Esc per la pausa, I per le informazioni."></canvas>
+<input id="name" maxlength="14" autocomplete="nickname" enterkeyhint="done" placeholder="Scrivi il tuo nome" aria-label="Il tuo nome in classifica">
 
 <script>
 (() => {
   // Port of the Godot project (scripts/main.gd, shape.gd, ball.gd, fx.gd, sfx.gd).
   // Differences from Godot: the leaderboard is online (the artifact's shared db)
-  // instead of local, and saved settings live in localStorage.
+  // instead of local, with the claude.ai account names instead of a typed one,
+  // and saved settings live in localStorage.
   // Logical resolution 720x1280, stretched with "expand" like the Godot project.
   const BASE_W = 720, BASE_H = 1280;
   const TAU = Math.PI * 2;
@@ -33,8 +41,31 @@
   const SHAPE_RADIUS = 120, TURN_TIME = 0.12;
   const BALL_RADIUS = 16, TRAIL_LEN = 12;
   const FONT = 'Montserrat, "Arial Black", Arial, sans-serif';
-  const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4 };
-  const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted';
+  const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5 };
+  const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', NAME_KEY = 'color-spin-name';
+  const VERSION = '1.1';
+  const NAME_ROW = 84; // extra room the name field takes on the game over screen
+  const ABOUT = [
+    ['COME SI GIOCA', [
+      'Ruota la figura: ogni pallina deve',
+      'toccare il lato del suo colore.',
+      'Ogni 10 punti sali di livello.',
+      'Ogni 3 livelli arriva un lato in più',
+      'e recuperi una vita.',
+      'Dopo 5 errori la partita finisce.',
+    ]],
+    ['COMANDI', [
+      'Tocca a sinistra o a destra per ruotare',
+      'Tastiera: frecce oppure A e D',
+      'P o Esc pausa  ·  M audio',
+    ]],
+    ['CREDITI', [
+      'Un gioco di iamdex',
+      'Fatto con Godot 4: grafica e suoni',
+      'sono generati dal codice',
+      'github.com/iamdex/color-spin',
+    ]],
+  ];
   const TOP_SIZE = 10;
   const RESUME_BEATS = 3, RESUME_BEAT = 0.5; // "3, 2, 1" countdown before play resumes
 
@@ -247,13 +278,48 @@
     while (i < board.rows.length && board.rows[i].score >= s) i++;
     if (i >= TOP_SIZE) return 0;
     const d = new Date(), pad = n => String(n).padStart(2, '0');
-    board.rows.splice(i, 0, { id: `local-${Date.now()}`, score: s, level: lvl,
+    board.rows.splice(i, 0, { id: `local-${Date.now()}`, score: s, level: lvl, name: playerName,
       date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` });
     board.rows.length = Math.min(board.rows.length, TOP_SIZE);
-    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(board.rows)); } catch {}
+    saveLocalBoard();
     board.localHighlight = i;
     return i + 1;
   }
+  function saveLocalBoard() {
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(board.rows)); } catch {}
+  }
+
+  // --- Name field (local leaderboard only) ------------------------------------
+  // A real <input> over the canvas, so phones bring up their keyboard.
+  const nameInput = document.getElementById('name');
+  let playerName = (() => { try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; } })();
+  let nameShown = false;
+  nameInput.addEventListener('input', () => {
+    playerName = nameInput.value.trim();
+    try { localStorage.setItem(NAME_KEY, playerName); } catch {}
+    if (board.localHighlight >= 0) { board.rows[board.localHighlight].name = playerName; saveLocalBoard(); }
+  });
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') nameInput.blur(); });
+  function showNameInput() {
+    nameInput.value = playerName; nameShown = true;
+    nameInput.style.display = 'block'; nameInput.style.opacity = '0';
+  }
+  function hideNameInput() {
+    if (!nameShown) return;
+    nameShown = false; nameInput.blur(); nameInput.style.display = 'none';
+  }
+  // Right under the rank line; the buttons move down to make room for it.
+  const nameField = () => ({ x: W / 2 - 170, y: H * 0.62 - 6, w: 340, h: 66 });
+  function placeNameInput(alpha) {
+    const c = canvas.getBoundingClientRect(), f = nameField();
+    Object.assign(nameInput.style, {
+      left: `${c.left + f.x * scale}px`, top: `${c.top + f.y * scale}px`,
+      width: `${f.w * scale}px`, height: `${f.h * scale}px`,
+      fontSize: `${30 * scale}px`, borderRadius: `${20 * scale}px`, padding: `0 ${20 * scale}px`,
+      opacity: String(alpha),
+    });
+  }
+
   async function initBoard() {
     const cl = window.claude;
     const [db, user] = cl && cl.use ? await Promise.all([cl.use('db'), cl.use('user')]) : [null, null];
@@ -352,11 +418,13 @@
   }
 
   function goToMenu() {
+    hideNameInput();
     balls = []; clearFx();
     state = STATE.MENU; shape.setup(MENU_SIDES); menuTurnTimer = 1; fade = 1;
   }
 
   function start() {
+    hideNameInput();
     balls = []; clearFx();
     score = 0; lives = MAX_LIVES; level = 1; newBest = false; spawnTimer = 1;
     streak = 0; lastRank = 0; lastGameImproved = false;
@@ -443,6 +511,7 @@
     if (score > best) { best = score; newBest = true; saveBest(); }
     if (board.status === 'local') {
       lastRank = recordLocal(score, level);
+      if (lastRank > 0) showNameInput();
     } else {
       lastGameImproved = board.myId !== null && score > board.myBest;
       lastRank = lastGameImproved ? onlineRank(score) : 0;
@@ -456,6 +525,7 @@
     { x: W / 2 - 150, y: H * 0.77 + 64, w: 300, h: 88 },
   ];
   const soundButton = () => ({ x: W - 92, y: 24, w: 68, h: 68 });
+  const infoButton = () => ({ x: 24, y: 24, w: 68, h: 68 });
   // Top center, between the score and the lives.
   const pauseButton = () => ({ x: W / 2 - 34, y: 22, w: 68, h: 68 });
   const pauseButtons = () => [
@@ -464,10 +534,10 @@
   ];
   const pauseSoundButton = () => ({ x: W / 2 - 34, y: H * 0.45 + 232, w: 68, h: 68 });
   const grow = (r, k) => ({ x: r.x - k, y: r.y - k, w: r.w + 2 * k, h: r.h + 2 * k });
-  const gameOverButtons = () => [
-    { x: W / 2 - 150, y: H * 0.62, w: 300, h: 88 },
-    { x: W / 2 - 150, y: H * 0.62 + 108, w: 300, h: 88 },
-  ];
+  const gameOverButtons = () => {
+    const y = H * 0.62 + (nameShown ? NAME_ROW : 0);
+    return [{ x: W / 2 - 150, y, w: 300, h: 88 }, { x: W / 2 - 150, y: y + 108, w: 300, h: 88 }];
+  };
   const hit = (r, p) => p && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 
   function handle(action, pos) {
@@ -477,6 +547,8 @@
       if (action === 'tap' && hit(soundButton(), pos)) toggleSound();
       else if (action === 'tap' && hit(menuButtons()[1], pos)) {
         sfx.play('click'); state = STATE.LEADERBOARD; fade = 0.6; refreshNames();
+      } else if (action === 'info' || (action === 'tap' && hit(infoButton(), pos))) {
+        sfx.play('click'); state = STATE.ABOUT; fade = 0.6;
       } else if (action !== 'back') start();
     } else if (state === STATE.PLAYING) {
       if (action === 'pause' || action === 'back' || (action === 'tap' && hit(grow(pauseButton(), 12), pos))) {
@@ -522,10 +594,10 @@
   const KEYS = {
     ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right',
     ' ': 'confirm', Enter: 'confirm', ArrowUp: 'confirm', Escape: 'back', m: 'mute', M: 'mute',
-    p: 'pause', P: 'pause',
+    p: 'pause', P: 'pause', i: 'info', I: 'info',
   };
   window.addEventListener('keydown', e => {
-    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || !KEYS[e.key]) return;
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || !KEYS[e.key] || e.target === nameInput) return;
     if (e.key !== 'Escape') e.preventDefault();
     handle(KEYS[e.key]);
   });
@@ -578,7 +650,7 @@
     }
     updateFx(dt);
 
-    if (state === STATE.MENU || state === STATE.LEADERBOARD) {
+    if (state === STATE.MENU || state === STATE.LEADERBOARD || state === STATE.ABOUT) {
       menuTurnTimer -= dt;
       if (menuTurnTimer <= 0) { shape.rotateStep(); menuTurnTimer = 0.9; }
     } else if (state === STATE.PLAYING) {
@@ -699,6 +771,7 @@
     button(lb, 'CLASSIFICA', WHITE, 0.1, WHITE);
     if (best > 0) centered(`RECORD  ${best}`, lb.y + lb.h + 52, 24, WHITE, 0.55);
     drawSoundIcon(soundButton());
+    drawInfoIcon(infoButton());
   }
 
   // Curved arrow; dir 1 = clockwise, -1 = counter-clockwise (mirrored).
@@ -725,6 +798,14 @@
     ctx.beginPath();
     for (const x of [-7, 7]) { ctx.moveTo(cx + x, cy - 11); ctx.lineTo(cx + x, cy + 11); }
     ctx.stroke();
+  }
+
+  function drawInfoIcon(r) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2, col = 'rgba(255,255,255,0.75)';
+    ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(cx, cy, 17, 0, TAU); ctx.stroke();
+    circle(cx, cy - 8, 2.8, col);
+    ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(cx, cy - 2); ctx.lineTo(cx, cy + 9); ctx.stroke();
   }
 
   function drawSoundIcon(r) {
@@ -758,7 +839,8 @@
       circle(76, y + 28, 18, rgba(PALETTE[i % PALETTE.length]));
       ctx.font = `800 22px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = rgba(INK); ctx.fillText(String(i + 1), 76, y + 29);
-      let name = local ? row.date : board.names[row.id] || 'Giocatore';
+      // Local games saved before names existed, or left unnamed, show their date.
+      let name = local ? row.name || row.date : board.names[row.id] || 'Giocatore';
       if (mine && !local) name += ' (tu)';
       ctx.font = `800 24px ${FONT}`;
       while (name.length > 3 && ctx.measureText(name).width > w - 250) name = name.slice(0, -2) + '…';
@@ -767,6 +849,20 @@
       text(40 + w - 22, y + 39, String(row.score), 30, WHITE, 1, 'right');
     });
     if (board.status === 'ready' && !board.myId) centered('Accedi per entrare in classifica', H * 0.84, 20, WHITE, 0.5);
+    centered('Tocca per tornare al menu', H * 0.9, 22, WHITE, 0.5);
+  }
+
+  function drawAbout() {
+    ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
+    centered('COLOR SPIN', H * 0.1, 60, WHITE);
+    centered(`Versione ${VERSION}`, H * 0.1 + 40, 20, WHITE, 0.5);
+    let y = H * 0.2;
+    for (const [title, lines] of ABOUT) {
+      centered(title, y, 26, PALETTE[2]);
+      y += 44;
+      for (const line of lines) { centered(line, y, 22, WHITE, 0.8); y += 34; }
+      y += 30;
+    }
     centered('Tocca per tornare al menu', H * 0.9, 22, WHITE, 0.5);
   }
 
@@ -830,6 +926,7 @@
     if (lastRank > 0) centered(`${lastRank}° IN CLASSIFICA`, H * 0.52 + 44 + slide, 22, WHITE, 0.7 * t);
     else if (score > 0 && board.status === 'ready' && !board.myId)
       centered('Accedi per entrare in classifica', H * 0.52 + 44 + slide, 20, WHITE, 0.5 * t);
+    if (nameShown) placeNameInput(t);
     if (gameOverTime > 0.6) {
       const b = gameOverButtons();
       button(b[0], 'RIGIOCA', PALETTE[2], 1, INK);
@@ -845,6 +942,7 @@
     drawFx(worldX, worldY);
     if (state === STATE.MENU) drawMenu();
     else if (state === STATE.LEADERBOARD) drawLeaderboard();
+    else if (state === STATE.ABOUT) drawAbout();
     else {
       drawPlay();
       if (state === STATE.PAUSED) drawPause();

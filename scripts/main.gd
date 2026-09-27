@@ -1,7 +1,7 @@
 extends Node2D
 ## Game loop: main menu, spawns balls from the 4 screen edges, checks hits
 ## against the figure, tracks score / lives / level, handles input, pause,
-## game over, sound and the local leaderboard.
+## game over, sound, the about screen and the local leaderboard.
 
 const ShapeScript := preload("res://scripts/shape.gd")
 const BallScript := preload("res://scripts/ball.gd")
@@ -27,14 +27,37 @@ const LEVELS_PER_SIDE := 3
 const MIN_SIDES := 3
 const MAX_SIDES := 8
 const MENU_SIDES := 6
+const ABOUT := [
+	["COME SI GIOCA", [
+		"Ruota la figura: ogni pallina deve",
+		"toccare il lato del suo colore.",
+		"Ogni 10 punti sali di livello.",
+		"Ogni 3 livelli arriva un lato in più",
+		"e recuperi una vita.",
+		"Dopo 5 errori la partita finisce.",
+	]],
+	["COMANDI", [
+		"Tocca a sinistra o a destra per ruotare",
+		"Tastiera: frecce oppure A e D",
+		"P o Esc pausa  ·  M audio",
+	]],
+	["CREDITI", [
+		"Un gioco di iamdex",
+		"Fatto con Godot 4: grafica e suoni",
+		"sono generati dal codice",
+		"github.com/iamdex/color-spin",
+	]],
+]
 const SPAWN_DIRS: Array[Vector2] = [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]
 const SAVE_PATH := "user://save.cfg"
 const DOT_COUNT := 40
 const TOP_SIZE := 10
 const RESUME_BEATS := 3   # "3, 2, 1" countdown before play resumes
 const RESUME_BEAT := 0.5
+const NAME_MAX := 14
+const NAME_ROW := 84.0    # extra room the name field takes on the game over screen
 
-enum State { MENU, PLAYING, PAUSED, GAME_OVER, LEADERBOARD }
+enum State { MENU, PLAYING, PAUSED, GAME_OVER, LEADERBOARD, ABOUT }
 
 var state := State.MENU
 var score := 0
@@ -57,8 +80,9 @@ var time := 0.0
 var dots: Array[Vector3] = [] # x, y, radius of the drifting background dots
 var streak := 0               # consecutive hits, drives the hit sound's pitch
 var arrow_flash := [0.0, 0.0] # left, right: lights up the turn arrows on tap
-var top: Array[Dictionary] = [] # local leaderboard: {score, level, date}
+var top: Array[Dictionary] = [] # local leaderboard: {score, level, date, name}
 var last_rank := 0            # position of the last game in `top`, 0 = not ranked
+var player_name := ""         # last name typed, offered again for the next record
 
 var world: Node2D
 var shape: Node2D
@@ -66,6 +90,7 @@ var balls: Node2D
 var fx: Node2D
 var sfx: Node
 var hud: Control
+var name_edit: LineEdit
 var font: Font
 
 
@@ -95,6 +120,8 @@ func _ready() -> void:
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.draw.connect(_draw_hud)
 	layer.add_child(hud)
+	name_edit = _make_name_edit()
+	hud.add_child(name_edit)
 
 	var size := get_viewport_rect().size
 	for i in DOT_COUNT:
@@ -111,7 +138,54 @@ func _make_font() -> Font:
 	return f
 
 
+func _make_name_edit() -> LineEdit:
+	var e := LineEdit.new()
+	e.max_length = NAME_MAX
+	e.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	e.placeholder_text = "Scrivi il tuo nome"
+	e.select_all_on_focus = true
+	e.visible = false
+	e.add_theme_font_override("font", font)
+	e.add_theme_font_size_override("font_size", 30)
+	e.add_theme_color_override("font_color", Color.WHITE)
+	e.add_theme_color_override("font_placeholder_color", Color(1, 1, 1, 0.4))
+	e.add_theme_color_override("caret_color", PALETTE[2])
+	e.add_theme_color_override("selection_color", Color(PALETTE[2], 0.35))
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(1, 1, 1, 0.08)
+	sb.border_color = Color(1, 1, 1, 0.3)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(20)
+	sb.anti_aliasing = true
+	sb.content_margin_left = 20
+	sb.content_margin_right = 20
+	e.add_theme_stylebox_override("normal", sb)
+	# The focus style is drawn over "normal": just a highlighted border.
+	var focus := sb.duplicate() as StyleBoxFlat
+	focus.draw_center = false
+	focus.border_color = PALETTE[2]
+	e.add_theme_stylebox_override("focus", focus)
+	e.text_changed.connect(_on_name_changed)
+	e.text_submitted.connect(func(_t: String) -> void: e.release_focus())
+	return e
+
+
+func _on_name_changed(text: String) -> void:
+	player_name = text.strip_edges()
+	if last_rank > 0:
+		top[last_rank - 1]["name"] = player_name
+
+
+## Saves the typed name when leaving the game over screen.
+func _close_name_edit() -> void:
+	if name_edit.visible:
+		name_edit.release_focus()
+		name_edit.visible = false
+		_save()
+
+
 func _go_to_menu() -> void:
+	_close_name_edit()
 	_set_paused(false)
 	_clear_board()
 	state = State.MENU
@@ -121,6 +195,7 @@ func _go_to_menu() -> void:
 
 
 func _start() -> void:
+	_close_name_edit()
 	_set_paused(false)
 	_clear_board()
 	score = 0
@@ -160,6 +235,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				action = "back"
 			KEY_P:
 				action = "pause"
+			KEY_I:
+				action = "info"
 			KEY_M:
 				action = "mute"
 	if action == "":
@@ -176,6 +253,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif action == "tap" and _menu_buttons()[1].has_point(pos):
 				sfx.play("click")
 				state = State.LEADERBOARD
+				fade = 0.6
+			elif action == "info" or (action == "tap" and _info_button().has_point(pos)):
+				sfx.play("click")
+				state = State.ABOUT
 				fade = 0.6
 			elif action != "back":
 				_start()
@@ -210,6 +291,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				sfx.play("click")
 				_go_to_menu()
 		State.GAME_OVER:
+			# A tap outside the name field closes the keyboard (and may press a button).
+			name_edit.release_focus()
 			if game_over_time < 0.6:
 				return
 			var buttons := _game_over_buttons()
@@ -219,7 +302,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif action == "back" or buttons[1].has_point(pos):
 				sfx.play("click")
 				_go_to_menu()
-		State.LEADERBOARD:
+		State.LEADERBOARD, State.ABOUT:
 			# Any tap or key goes back: the whole screen is the "back" button.
 			sfx.play("click")
 			state = State.MENU
@@ -274,7 +357,7 @@ func _process(delta: float) -> void:
 	world.position = center + Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake
 
 	match state:
-		State.MENU, State.LEADERBOARD:
+		State.MENU, State.LEADERBOARD, State.ABOUT:
 			menu_turn_timer -= delta
 			if menu_turn_timer <= 0.0:
 				shape.rotate_step()
@@ -290,6 +373,11 @@ func _process(delta: float) -> void:
 			_check_hits()
 		State.GAME_OVER:
 			game_over_time += delta
+			if name_edit.visible:
+				var r := _name_field()
+				name_edit.position = r.position
+				name_edit.size = r.size
+				name_edit.modulate.a = clampf(game_over_time * 3.0, 0.0, 1.0)
 	queue_redraw()
 	hud.queue_redraw()
 
@@ -409,6 +497,10 @@ func _game_over() -> void:
 		new_best = true
 	_record_score()
 	_save()
+	if last_rank > 0:
+		name_edit.text = player_name
+		name_edit.modulate.a = 0.0
+		name_edit.visible = true
 
 
 ## Inserts this game into the local top list, keeping it sorted and capped.
@@ -422,7 +514,8 @@ func _record_score() -> void:
 	if i >= TOP_SIZE:
 		return
 	var d := Time.get_date_dict_from_system()
-	top.insert(i, {"score": score, "level": level, "date": "%02d/%02d/%d" % [d.day, d.month, d.year]})
+	top.insert(i, {"score": score, "level": level, "date": "%02d/%02d/%d" % [d.day, d.month, d.year],
+			"name": player_name})
 	if top.size() > TOP_SIZE:
 		top.resize(TOP_SIZE)
 	last_rank = i + 1
@@ -514,6 +607,8 @@ func _draw_hud() -> void:
 			_draw_game_over(size)
 		State.LEADERBOARD:
 			_draw_leaderboard(size)
+		State.ABOUT:
+			_draw_about(size)
 	if flash > 0.0:
 		hud.draw_rect(Rect2(Vector2.ZERO, size), Color(1, 0.2, 0.2, 0.22 * flash))
 	if fade > 0.0:
@@ -552,6 +647,7 @@ func _draw_menu(size: Vector2) -> void:
 	if best > 0:
 		_centered("RECORD  %d" % best, buttons[1].end.y + 52.0, 24, Color(1, 1, 1, 0.55))
 	_draw_sound_icon(_sound_button())
+	_draw_info_icon(_info_button())
 
 
 func _draw_play(size: Vector2) -> void:
@@ -632,8 +728,26 @@ func _draw_leaderboard(size: Vector2) -> void:
 		_centered("Ancora nessun punteggio: gioca una partita!", size.y * 0.4, 24, Color(1, 1, 1, 0.6))
 	var rows: Array = []
 	for e in top:
-		rows.append([str(e["date"]), int(e["level"]), int(e["score"])])
+		# Games saved before names existed, or left unnamed, show their date.
+		var label := str(e.get("name", ""))
+		rows.append([label if label != "" else str(e["date"]), int(e["level"]), int(e["score"])])
 	_draw_rows(size, rows, last_rank - 1)
+	_centered("Tocca per tornare al menu", size.y * 0.9, 22, Color(1, 1, 1, 0.5))
+
+
+func _draw_about(size: Vector2) -> void:
+	hud.draw_rect(Rect2(Vector2.ZERO, size), Color(BG_BOTTOM, 0.85))
+	_centered("COLOR SPIN", size.y * 0.1, 60, Color.WHITE)
+	_centered("Versione %s" % ProjectSettings.get_setting("application/config/version", "1.0"),
+			size.y * 0.1 + 40, 20, Color(1, 1, 1, 0.5))
+	var y := size.y * 0.2
+	for section in ABOUT:
+		_centered(section[0], y, 26, PALETTE[2])
+		y += 44.0
+		for line in section[1]:
+			_centered(line, y, 22, Color(1, 1, 1, 0.8))
+			y += 34.0
+		y += 30.0
 	_centered("Tocca per tornare al menu", size.y * 0.9, 22, Color(1, 1, 1, 0.5))
 
 
@@ -687,6 +801,14 @@ func _draw_pause_icon(rect: Rect2) -> void:
 		hud.draw_line(c + Vector2(x, -11), c + Vector2(x, 11), Color(1, 1, 1, 0.75), 7.0, true)
 
 
+func _draw_info_icon(rect: Rect2) -> void:
+	var c := rect.get_center()
+	var col := Color(1, 1, 1, 0.75)
+	hud.draw_arc(c, 17, 0, TAU, 32, col, 3.0, true)
+	hud.draw_circle(c + Vector2(0, -8), 2.8, col)
+	hud.draw_line(c + Vector2(0, -2), c + Vector2(0, 9), col, 4.0, true)
+
+
 func _draw_sound_icon(rect: Rect2) -> void:
 	var c := rect.get_center()
 	var col := Color(1, 1, 1, 0.75)
@@ -714,6 +836,10 @@ func _sound_button() -> Rect2:
 	return Rect2(hud.size.x - 92, 24, 68, 68)
 
 
+func _info_button() -> Rect2:
+	return Rect2(24, 24, 68, 68)
+
+
 ## Top center, between the score and the lives.
 func _pause_button() -> Rect2:
 	return Rect2(hud.size.x / 2.0 - 34, 22, 68, 68)
@@ -731,11 +857,17 @@ func _pause_sound_button() -> Rect2:
 	return Rect2(hud.size.x / 2.0 - 34, hud.size.y * 0.45 + 232, 68, 68)
 
 
+## Right under the rank line; the buttons move down to make room for it.
+func _name_field() -> Rect2:
+	return Rect2(hud.size.x / 2.0 - 170, hud.size.y * 0.62 - 6, 340, 66)
+
+
 func _game_over_buttons() -> Array[Rect2]:
 	var size := hud.size
+	var y := size.y * 0.62 + (NAME_ROW if name_edit.visible else 0.0)
 	return [
-		Rect2(size.x / 2.0 - 150, size.y * 0.62, 300, 88),
-		Rect2(size.x / 2.0 - 150, size.y * 0.62 + 108, 300, 88),
+		Rect2(size.x / 2.0 - 150, y, 300, 88),
+		Rect2(size.x / 2.0 - 150, y + 108, 300, 88),
 	]
 
 
@@ -776,6 +908,7 @@ func _load() -> void:
 		return
 	best = cfg.get_value("score", "best", 0)
 	sfx.muted = cfg.get_value("settings", "muted", false)
+	player_name = cfg.get_value("settings", "name", "")
 	top.clear()
 	for e in cfg.get_value("score", "top", []):
 		if e is Dictionary:
@@ -787,4 +920,5 @@ func _save() -> void:
 	cfg.set_value("score", "best", best)
 	cfg.set_value("score", "top", top)
 	cfg.set_value("settings", "muted", sfx.muted)
+	cfg.set_value("settings", "name", player_name)
 	cfg.save(SAVE_PATH)
