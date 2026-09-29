@@ -1,0 +1,2627 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body>
+<title>Color Spin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800&display=swap">
+<style>
+  :root { color-scheme: dark; --bg: #08080f; box-sizing: border-box; height: 100%; background: var(--bg); }
+  body { height: 100%; margin: 0; background: var(--bg); overflow: hidden;
+         display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; touch-action: none; -webkit-tap-highlight-color: transparent;
+           user-select: none; -webkit-user-select: none; }
+  canvas:focus { outline: none; }
+  canvas:focus-visible { outline: 2px solid #ffd43b; outline-offset: -2px; }
+  #name { position: fixed; display: none; box-sizing: border-box; margin: 0; text-align: center;
+          font-family: Montserrat, "Arial Black", Arial, sans-serif; font-weight: 800; color: #fff;
+          background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.3);
+          outline: none; caret-color: #ffd43b; }
+  #name::placeholder { color: rgba(255,255,255,0.4); }
+  #name:focus { border-color: #ffd43b; }
+</style>
+
+<canvas id="game" tabindex="0"></canvas>
+<input id="name" maxlength="14" autocomplete="nickname" enterkeyhint="done">
+
+<script>
+(() => {
+  // Color Spin. This page is the game: it runs as the claude.ai artifact, on
+  // GitHub Pages and inside the mobile app (mobile/, a WebView). It started as
+  // a port of the Godot project, now archived in godot/.
+  // Music is scheduled with Web Audio start times. On claude.ai the leaderboard
+  // is the artifact's shared db with the account names; elsewhere it is the
+  // global one (server/, a Cloudflare Worker) with a typed name, or a local
+  // top 10 when offline. Saved settings live in localStorage.
+  // Logical resolution 720x1280, stretched to fill the screen.
+  const BASE_W = 720, BASE_H = 1280;
+  const TAU = Math.PI * 2;
+
+  const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+  const PALETTE = ['#ff4d6d', '#4dabf7', '#ffd43b', '#51cf66', '#b197fc', '#ff922b', '#3bc9db', '#f783ac'].map(hex);
+  // The background colors change with the theme (see THEMES).
+  let BG_TOP = hex('#1c1638'), BG_BOTTOM = hex('#08080f');
+  const INK = hex('#12121c');
+  const WHITE = [1, 1, 1];
+  const MAX_LIVES = 5, POINTS_PER_LEVEL = 10, LEVELS_PER_SIDE = 3;
+  const MIN_SIDES = 3, MAX_SIDES = 8, MENU_SIDES = 6, DOT_COUNT = 40;
+  const SPAWN_DIRS = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+  const SHAPE_RADIUS = 120, TURN_TIME = 0.12;
+  const BALL_RADIUS = 16, TRAIL_LEN = 12;
+  const FONT = 'Montserrat, "Arial Black", Arial, sans-serif';
+  const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6, AWARDS: 7 };
+  const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
+  const VERSION = '1.6';
+  // Hits in a row for x2, x3 and x4. A miss starts the count again.
+  const COMBO_STEPS = [10, 25, 50];
+  const JOLLY_POINTS = 3, SLOW_TIME = 5, SLOW_FACTOR = 0.5;
+  const SEEN_KEY = 'color-spin-seen'; // special balls already introduced to this player
+  // The daily challenge: one ball sequence per day (Italian time), the same for
+  // everyone, with a rule of the day taken in turn from TWISTS.
+  const DAILY_START = '2026-09-29', DAY_MS = 86400000, DAILY_KEY = 'color-spin-daily';
+  const SHARE_URL = 'iamdex.github.io/color-spin';
+  // special: {kind: [from level, chance]} replaces that ball's usual rule.
+  const TWISTS = [
+    { id: 'rainbow', special: { jolly: [1, 0.15] } },
+    { id: 'chameleon', special: { chameleon: [4] } },
+    { id: 'turbo', speed: 1.25 },
+    { id: 'hourglass', special: { slow: [1, 0.08] } },
+    { id: 'lives', lives: 3 },
+    { id: 'classic' },
+  ];
+  const NO_TWIST = { id: 'none' };
+  // Modes picked on the menu. 60 seconds: a miss costs time, a heart gives some.
+  // Zen: no lives and no end, at an easy pace.
+  // Hardcore: one life, a fast pace from the start, no hearts.
+  const MODES = ['classic', 'sprint', 'zen', 'hardcore'], MODE_KEY = 'color-spin-mode';
+  const SPRINT_TIME = 60, SPRINT_MISS = 3, SPRINT_HEART = 5, SPRINT_BOOST = 2, ZEN_PACE = 3, HARDCORE_BOOST = 3;
+
+  // Colorblind help: a symbol for each color, in PALETTE's order.
+  const SYMBOLS = ['dot', 'square', 'triangle', 'diamond', 'plus', 'cross', 'star', 'bars'];
+  const SYMBOLS_KEY = 'color-spin-symbols', AWARDS_KEY = 'color-spin-awards', LOOK_KEY = 'color-spin-look';
+  // Looks won with the awards: background themes and ball trails. The first of each is free.
+  const THEMES = [
+    { id: 'night', top: '#1c1638', bottom: '#08080f' },
+    { id: 'ocean', top: '#0b2a4a', bottom: '#040a14' },
+    { id: 'forest', top: '#0f2e22', bottom: '#030a06' },
+    { id: 'sunset', top: '#3d1733', bottom: '#0d0510' },
+    { id: 'neon', top: '#2a0b45', bottom: '#06020f' },
+    { id: 'zen', top: '#1c2e36', bottom: '#081014' },
+    { id: 'ember', top: '#3d130c', bottom: '#0c0402' },
+    { id: 'gold', top: '#33270d', bottom: '#0b0803' },
+  ];
+  const TRAILS = ['classic', 'comet', 'sparkle', 'stars', 'rainbow'];
+  // Awards and what each one unlocks; the conditions are in checkAwards().
+  const AWARDS = [
+    ['first', 'theme:ocean'], ['pentagon', 'trail:comet'], ['score_100', 'theme:forest'],
+    ['combo_25', 'trail:sparkle'], ['octagon', 'theme:sunset'], ['specials', 'trail:stars'],
+    ['sprint_60', 'theme:neon'], ['combo_50', 'trail:rainbow'], ['zen_100', 'theme:zen'],
+    ['hardcore_7', 'theme:ember'], ['daily_7', 'theme:gold'],
+  ];
+  const SITE_URL = 'https://espertini.com', SITE_LABEL = 'espertini.com', LANG_KEY = 'color-spin-lang';
+  // All the game's texts. The texts of the online leaderboard are used only on claude.ai.
+  const TEXT = {
+    "it": {
+      "lang_name": "ITALIANO",
+      "tagline_1": "Tocca a sinistra o a destra per ruotare",
+      "tagline_2": "e abbina il colore delle palline",
+      "play": "GIOCA",
+      "leaderboard": "CLASSIFICA",
+      "best": "RECORD  %d",
+      "hud_level": "LIVELLO %d",
+      "banner_level": "Livello %d",
+      "banner_life": "Livello %d  +1 vita",
+      "banner_combo": "Combo x%d!",
+      "banner_heart": "+1 vita",
+      "banner_slow": "Rallentatore!",
+      "hud_combo": "COMBO %d",
+      "daily": "SFIDA #%d",
+      "daily_today": "OGGI %d",
+      "daily_streak": "%d GIORNI DI FILA",
+      "daily_new_best": "RECORD DI OGGI!",
+      "daily_best": "RECORD DI OGGI  %d",
+      "daily_rank": "%d° OGGI",
+      "daily_rank_of": "%d° OGGI SU %d",
+      "share": "CONDIVIDI",
+      "mode_hardcore": "HARDCORE",
+      "mode_info_hardcore": "Una vita sola, ritmo alto, niente cuori",
+      "tab_hardcore": "HARDCORE",
+      "top_hardcore": "I migliori in hardcore",
+      "no_hardcore": "Ancora nessuna partita hardcore",
+      "share_hardcore": "Color Spin · Hardcore: %d punti! Riesci a battermi?",
+      "symbols": "SIMBOLI",
+      "awards": "TROFEI",
+      "awards_count": "%d SU %d",
+      "theme": "TEMA",
+      "trail": "SCIA",
+      "award_unlocked": "TROFEO: %s",
+      "locked": "Si sblocca con il trofeo %s",
+      "award_list": {
+        "first": ["PRIMO GIRO", "Finisci una partita"],
+        "pentagon": ["PENTAGONO", "Arriva al livello 7"],
+        "score_100": ["CENTO", "100 punti in una partita"],
+        "combo_25": ["COMBO X3", "25 palline giuste di fila"],
+        "octagon": ["OTTAGONO", "Arriva al livello 16"],
+        "specials": ["COLLEZIONISTA", "Prendi le 4 palline speciali"],
+        "sprint_60": ["FULMINE", "60 punti in 60 secondi"],
+        "combo_50": ["COMBO X4", "50 palline giuste di fila"],
+        "zen_100": ["PACE INTERIORE", "100 palline in una partita Zen"],
+        "hardcore_7": ["DURO A MORIRE", "Livello 7 in Hardcore"],
+        "daily_7": ["SETTIMANA PERFETTA", "La sfida 7 giorni di fila"]
+      },
+      "themes": {
+        "night": "NOTTE", "ocean": "OCEANO", "forest": "FORESTA", "sunset": "TRAMONTO",
+        "neon": "NEON", "zen": "ZEN", "ember": "BRACE", "gold": "ORO"
+      },
+      "trails": {
+        "classic": "CLASSICA", "comet": "COMETA", "sparkle": "SCINTILLE", "stars": "STELLE", "rainbow": "ARCOBALENO"
+      },
+      "mode_classic": "CLASSICA",
+      "mode_sprint": "60 SECONDI",
+      "mode_zen": "ZEN",
+      "mode_info_sprint": "Più punti che puoi: un errore costa 3 secondi",
+      "mode_info_zen": "Niente vite, niente fretta: solo colori e musica",
+      "mode_best": "%s  ·  RECORD %d",
+      "daily_streak_short": "%d DI FILA",
+      "time_up": "TEMPO SCADUTO!",
+      "banner_time": "+%d secondi",
+      "rank_of": "%d° SU %d",
+      "tab_classic": "CLASSICA",
+      "tab_sprint": "60 SEC",
+      "top_sprint": "I migliori in 60 secondi",
+      "no_sprint": "Ancora nessuna partita da 60 secondi",
+      "share_sprint": "Color Spin · 60 secondi: %d punti! Riesci a battermi?",
+      "saved": "Immagine salvata",
+      "share_failed": "Condivisione non riuscita",
+      "tab_today": "OGGI",
+      "no_daily": "Nessuno ha ancora giocato la sfida di oggi",
+      "offline": "Classifica non raggiungibile",
+      "card_classic": "RIESCI A BATTERMI?",
+      "share_daily": "Color Spin · Sfida #%d · %s: %d punti! Riesci a battermi?",
+      "share_classic": "Color Spin: %d punti! Riesci a battermi?",
+      "twists": {
+        "rainbow": ["PIOGGIA D'ARCOBALENO", "Tanti arcobaleni fin da subito"],
+        "chameleon": ["GIORNO DEI CAMALEONTI", "Camaleonti già dal livello 4"],
+        "turbo": ["TURBO", "Palline più veloci del solito"],
+        "hourglass": ["TEMPO SOSPESO", "Tante clessidre fin da subito"],
+        "lives": ["TRE VITE", "Solo 3 vite: niente errori!"],
+        "classic": ["CLASSICA", "Le regole di sempre"]
+      },
+      "specials": {
+        "heart": ["CUORE", "Sul suo colore: +1 vita"],
+        "jolly": ["ARCOBALENO", "Va bene su ogni lato: punti x3"],
+        "slow": ["CLESSIDRA", "Sul suo colore: rallenta tutto"],
+        "chameleon": ["CAMALEONTE", "Cambia colore all'ultimo!"]
+      },
+      "game_over": "GAME OVER",
+      "points_level": "PUNTI  ·  LIVELLO %d  ·  COMBO %d",
+      "new_best": "NUOVO RECORD!",
+      "rank": "%d° IN CLASSIFICA",
+      "replay": "RIGIOCA",
+      "menu": "MENU",
+      "paused": "PAUSA",
+      "pause_stats": "%d PUNTI  ·  LIVELLO %d",
+      "resume": "RIPRENDI",
+      "top_local": "I 10 migliori punteggi su questo dispositivo",
+      "no_scores": "Ancora nessun punteggio: gioca una partita!",
+      "tap_back": "Tocca per tornare al menu",
+      "version": "Versione %s",
+      "row_level": "liv. %d",
+      "name_hint": "Scrivi il tuo nome",
+      "settings": "IMPOSTAZIONI",
+      "music": "MUSICA",
+      "sounds": "SUONI",
+      "language": "LINGUA",
+      "on": "SÌ",
+      "off": "NO",
+      "back": "INDIETRO",
+      "about": [
+        [
+          "COME SI GIOCA",
+          [
+            "Ruota la figura: ogni pallina deve",
+            "toccare il lato del suo colore.",
+            "Colpi giusti di fila: punti x2, x3, x4.",
+            "Ogni 10 palline sali di livello, ogni 3",
+            "livelli un lato in più e una vita.",
+            "Dopo 5 errori la partita finisce."
+          ]
+        ],
+        [
+          "PALLINE SPECIALI",
+          [
+            "Cuore: una vita in più",
+            "Arcobaleno: va bene su ogni lato",
+            "Clessidra: rallenta tutto",
+            "Camaleonte: cambia colore all'ultimo"
+          ]
+        ],
+        [
+          "SFIDA DEL GIORNO",
+          [
+            "Ogni giorno le stesse palline per tutti,",
+            "con una regola speciale. Condividi!"
+          ]
+        ],
+        [
+          "MODALITÀ",
+          [
+            "60 secondi: un errore costa 3 secondi,",
+            "un cuore ne regala 5. Zen: niente vite.",
+            "Hardcore: una vita sola e ritmo alto."
+          ]
+        ],
+        [
+          "COMANDI",
+          [
+            "Tocca a sinistra o a destra per ruotare",
+            "Tastiera: frecce oppure A e D",
+            "P o Esc pausa  ·  M musica  ·  S suoni",
+            "Impostazioni: simboli per i daltonici"
+          ]
+        ],
+        [
+          "CREDITI",
+          [
+            "Un gioco di Davide Dex Espertini",
+            "Fatto in JavaScript: grafica, suoni",
+            "e musica sono generati dal codice"
+          ]
+        ]
+      ],
+      "top_online": "I 10 migliori giocatori",
+      "top_world": "I 10 migliori al mondo",
+      "loading": "Caricamento…",
+      "sign_in": "Accedi per entrare in classifica",
+      "player": "Giocatore",
+      "you": " (tu)",
+      "name_label": "Il tuo nome in classifica",
+      "aria": "Color Spin. Tocca a sinistra o a destra, oppure usa le frecce, per ruotare la figura. P o Esc per la pausa, M per la musica, S per i suoni, L per la lingua, I per le informazioni."
+    },
+    "en": {
+      "lang_name": "ENGLISH",
+      "tagline_1": "Tap left or right to spin",
+      "tagline_2": "and match the color of the balls",
+      "play": "PLAY",
+      "leaderboard": "LEADERBOARD",
+      "best": "BEST  %d",
+      "hud_level": "LEVEL %d",
+      "banner_level": "Level %d",
+      "banner_life": "Level %d  +1 life",
+      "banner_combo": "Combo x%d!",
+      "banner_heart": "+1 life",
+      "banner_slow": "Slow motion!",
+      "hud_combo": "COMBO %d",
+      "daily": "CHALLENGE #%d",
+      "daily_today": "TODAY %d",
+      "daily_streak": "%d DAYS IN A ROW",
+      "daily_new_best": "TODAY'S BEST!",
+      "daily_best": "TODAY'S BEST  %d",
+      "daily_rank": "#%d TODAY",
+      "daily_rank_of": "#%d TODAY OF %d",
+      "share": "SHARE",
+      "mode_hardcore": "HARDCORE",
+      "mode_info_hardcore": "One life, a fast pace, no hearts",
+      "tab_hardcore": "HARDCORE",
+      "top_hardcore": "Best in hardcore",
+      "no_hardcore": "No hardcore games yet",
+      "share_hardcore": "Color Spin · Hardcore: %d points! Can you beat me?",
+      "symbols": "SYMBOLS",
+      "awards": "AWARDS",
+      "awards_count": "%d OF %d",
+      "theme": "THEME",
+      "trail": "TRAIL",
+      "award_unlocked": "AWARD: %s",
+      "locked": "Unlocked by the %s award",
+      "award_list": {
+        "first": ["FIRST SPIN", "Finish a game"],
+        "pentagon": ["PENTAGON", "Reach level 7"],
+        "score_100": ["HUNDRED", "100 points in one game"],
+        "combo_25": ["COMBO X3", "25 hits in a row"],
+        "octagon": ["OCTAGON", "Reach level 16"],
+        "specials": ["COLLECTOR", "Catch the 4 special balls"],
+        "sprint_60": ["LIGHTNING", "60 points in 60 seconds"],
+        "combo_50": ["COMBO X4", "50 hits in a row"],
+        "zen_100": ["INNER PEACE", "100 balls in one Zen game"],
+        "hardcore_7": ["DIE HARD", "Level 7 in Hardcore"],
+        "daily_7": ["PERFECT WEEK", "The challenge 7 days in a row"]
+      },
+      "themes": {
+        "night": "NIGHT", "ocean": "OCEAN", "forest": "FOREST", "sunset": "SUNSET",
+        "neon": "NEON", "zen": "ZEN", "ember": "EMBER", "gold": "GOLD"
+      },
+      "trails": {
+        "classic": "CLASSIC", "comet": "COMET", "sparkle": "SPARKLE", "stars": "STARS", "rainbow": "RAINBOW"
+      },
+      "mode_classic": "CLASSIC",
+      "mode_sprint": "60 SECONDS",
+      "mode_zen": "ZEN",
+      "mode_info_sprint": "As many points as you can: a miss costs 3 seconds",
+      "mode_info_zen": "No lives, no rush: just colors and music",
+      "mode_best": "%s  ·  BEST %d",
+      "daily_streak_short": "%d IN A ROW",
+      "time_up": "TIME'S UP!",
+      "banner_time": "+%d seconds",
+      "rank_of": "#%d OF %d",
+      "tab_classic": "CLASSIC",
+      "tab_sprint": "60 SEC",
+      "top_sprint": "Best in 60 seconds",
+      "no_sprint": "No 60-second games yet",
+      "share_sprint": "Color Spin · 60 seconds: %d points! Can you beat me?",
+      "saved": "Image saved",
+      "share_failed": "Could not share",
+      "tab_today": "TODAY",
+      "no_daily": "Nobody has played today's challenge yet",
+      "offline": "Leaderboard unreachable",
+      "card_classic": "CAN YOU BEAT ME?",
+      "share_daily": "Color Spin · Challenge #%d · %s: %d points! Can you beat me?",
+      "share_classic": "Color Spin: %d points! Can you beat me?",
+      "twists": {
+        "rainbow": ["RAINBOW RAIN", "Lots of rainbows from the start"],
+        "chameleon": ["CHAMELEON DAY", "Chameleons from level 4"],
+        "turbo": ["TURBO", "Faster balls than usual"],
+        "hourglass": ["FROZEN TIME", "Lots of hourglasses from the start"],
+        "lives": ["THREE LIVES", "Only 3 lives: no mistakes!"],
+        "classic": ["CLASSIC", "The usual rules"]
+      },
+      "specials": {
+        "heart": ["HEART", "On its color: +1 life"],
+        "jolly": ["RAINBOW", "Fits any side: 3x points"],
+        "slow": ["HOURGLASS", "On its color: slows everything down"],
+        "chameleon": ["CHAMELEON", "Changes color at the last moment!"]
+      },
+      "game_over": "GAME OVER",
+      "points_level": "POINTS  ·  LEVEL %d  ·  COMBO %d",
+      "new_best": "NEW BEST!",
+      "rank": "RANKED #%d",
+      "replay": "PLAY AGAIN",
+      "menu": "MENU",
+      "paused": "PAUSED",
+      "pause_stats": "%d POINTS  ·  LEVEL %d",
+      "resume": "RESUME",
+      "top_local": "Top 10 scores on this device",
+      "no_scores": "No scores yet: play a game!",
+      "tap_back": "Tap to go back to the menu",
+      "version": "Version %s",
+      "row_level": "lv. %d",
+      "name_hint": "Type your name",
+      "settings": "SETTINGS",
+      "music": "MUSIC",
+      "sounds": "SOUNDS",
+      "language": "LANGUAGE",
+      "on": "ON",
+      "off": "OFF",
+      "back": "BACK",
+      "about": [
+        [
+          "HOW TO PLAY",
+          [
+            "Spin the shape so every ball",
+            "hits the side of its own color.",
+            "Hits in a row: points x2, x3, x4.",
+            "Every 10 balls you level up; every 3",
+            "levels a new side and a life back.",
+            "After 5 misses the game is over."
+          ]
+        ],
+        [
+          "SPECIAL BALLS",
+          [
+            "Heart: one more life",
+            "Rainbow: fits any side",
+            "Hourglass: slows everything down",
+            "Chameleon: changes color at the end"
+          ]
+        ],
+        [
+          "DAILY CHALLENGE",
+          [
+            "Every day the same balls for everyone,",
+            "with a special rule. Share your score!"
+          ]
+        ],
+        [
+          "MODES",
+          [
+            "60 seconds: a miss costs 3 seconds,",
+            "a heart gives 5 more. Zen: no lives.",
+            "Hardcore: one life and a fast pace."
+          ]
+        ],
+        [
+          "CONTROLS",
+          [
+            "Tap left or right to spin",
+            "Keyboard: arrows or A and D",
+            "P or Esc pause  ·  M music  ·  S sounds",
+            "Settings: symbols for colorblind players"
+          ]
+        ],
+        [
+          "CREDITS",
+          [
+            "A game by Davide Dex Espertini",
+            "Made in JavaScript: graphics, sounds",
+            "and music are generated in code"
+          ]
+        ]
+      ],
+      "top_online": "Top 10 players",
+      "top_world": "Top 10 worldwide",
+      "loading": "Loading…",
+      "sign_in": "Sign in to join the leaderboard",
+      "player": "Player",
+      "you": " (you)",
+      "name_label": "Your name on the leaderboard",
+      "aria": "Color Spin. Tap left or right, or use the arrow keys, to spin the shape. P or Esc to pause, M for music, S for sounds, L for language, I for info."
+    }
+  };
+  const LANGS = Object.keys(TEXT);
+  // Italian for Italian browsers, English everywhere else, until the player picks.
+  let lang = (() => { try { return localStorage.getItem(LANG_KEY); } catch { return null; } })();
+  if (!TEXT[lang]) lang = (navigator.language || '').toLowerCase().startsWith('it') ? 'it' : 'en';
+  const tr = (key, ...args) => { let i = 0; return TEXT[lang][key].replace(/%[ds]/g, () => args[i++]); };
+  const NAME_ROW = 84; // extra room the name field takes on the game over screen
+  const TOP_SIZE = 10;
+  const RESUME_BEATS = 3, RESUME_BEAT = 0.5; // "3, 2, 1" countdown before play resumes
+
+  const rgba = (c, a = 1) => `rgba(${c[0] * 255 | 0},${c[1] * 255 | 0},${c[2] * 255 | 0},${a})`;
+  const darkened = (c, k) => c.map(v => v * (1 - k));
+  const lightened = (c, k) => c.map(v => v + (1 - v) * k);
+  const fposmod = (x, m) => ((x % m) + m) % m;
+  const angleDiff = (from, to) => fposmod(to - from + Math.PI, TAU) - Math.PI;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const backOut = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2; };
+
+  const canvas = document.getElementById('game');
+  // `let`: the share card borrows it to draw with the same functions.
+  let ctx = canvas.getContext('2d');
+  let W = BASE_W, H = BASE_H, scale = 1, dpr = 1;
+
+  // --- Looks and awards ------------------------------------------------------
+  const loadJSON = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
+  const saveJSON = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
+  let symbolsOn = loadJSON(SYMBOLS_KEY, false) === true;
+  // got: award id -> when it was won; caught: the special balls ever caught.
+  const awardsRec = loadJSON(AWARDS_KEY, {});
+  awardsRec.got ||= {}; awardsRec.caught ||= [];
+  const isUnlocked = reward => reward === 'theme:night' || reward === 'trail:classic' ||
+    AWARDS.some(([id, r]) => r === reward && awardsRec.got[id]);
+  const look = loadJSON(LOOK_KEY, {});
+  if (!isUnlocked(`theme:${look.theme}`)) look.theme = 'night';
+  if (!isUnlocked(`trail:${look.trail}`)) look.trail = 'classic';
+  function applyTheme() {
+    const t = THEMES.find(t => t.id === look.theme) || THEMES[0];
+    BG_TOP = hex(t.top); BG_BOTTOM = hex(t.bottom);
+    document.documentElement.style.setProperty('--bg', t.bottom);
+  }
+  applyTheme();
+
+  function toggleSymbols() {
+    symbolsOn = !symbolsOn;
+    saveJSON(SYMBOLS_KEY, symbolsOn);
+    sfx.play('click');
+  }
+
+  // A small shape centered on x, y; s is about its half size.
+  function drawSymbol(kind, x, y, s, fill) {
+    ctx.fillStyle = ctx.strokeStyle = fill; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    if (kind === 'dot') { ctx.arc(x, y, s * 0.55, 0, TAU); ctx.fill(); }
+    else if (kind === 'square') { ctx.rect(x - s * 0.5, y - s * 0.5, s, s); ctx.fill(); }
+    else if (kind === 'triangle') {
+      ctx.moveTo(x, y - s * 0.7); ctx.lineTo(x + s * 0.7, y + s * 0.5); ctx.lineTo(x - s * 0.7, y + s * 0.5); ctx.closePath(); ctx.fill();
+    } else if (kind === 'diamond') {
+      ctx.moveTo(x, y - s * 0.75); ctx.lineTo(x + s * 0.55, y); ctx.lineTo(x, y + s * 0.75); ctx.lineTo(x - s * 0.55, y); ctx.closePath(); ctx.fill();
+    } else if (kind === 'plus' || kind === 'cross') {
+      const k = kind === 'plus' ? [[-0.7, 0, 0.7, 0], [0, -0.7, 0, 0.7]] : [[-0.5, -0.5, 0.5, 0.5], [-0.5, 0.5, 0.5, -0.5]];
+      for (const [a, b, c, d] of k) { ctx.moveTo(x + a * s, y + b * s); ctx.lineTo(x + c * s, y + d * s); }
+      ctx.lineWidth = s * 0.36; ctx.stroke();
+    } else if (kind === 'star') {
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? s * 0.35 : s * 0.8;
+        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+      }
+      ctx.closePath(); ctx.fill();
+    } else if (kind === 'bars') {
+      for (const dx of [-0.3, 0.3]) { ctx.moveTo(x + dx * s, y - s * 0.6); ctx.lineTo(x + dx * s, y + s * 0.6); }
+      ctx.lineWidth = s * 0.3; ctx.stroke();
+    }
+  }
+
+  // One piece of a ball's trail: i counts back from the ball, len is the trail length.
+  const trailLen = () => look.trail === 'comet' ? 24 : TRAIL_LEN;
+  function trailPiece(style, x, y, i, len, c, r = BALL_RADIUS) {
+    const t = 1 - (i + 1) / (len + 1);
+    const tc = style === 'rainbow' ? PALETTE[(i + Math.floor(time * 12)) % PALETTE.length] : c;
+    if (style === 'stars') {
+      if (i % 3 === 1) drawSymbol('star', x, y, r * (0.4 + 0.6 * t), rgba(tc, 0.6 * t));
+      return;
+    }
+    circle(x, y, r * (0.3 + 0.6 * t), rgba(tc, (style === 'comet' ? 0.3 : style === 'rainbow' ? 0.35 : 0.22) * t));
+    if (style === 'sparkle' && (i * 7 + Math.floor(time * 24)) % 5 === 0)
+      circle(x + ((i * 37) % 17 - 8) * r / 16, y + ((i * 53) % 17 - 8) * r / 16, 2.5 * r / 16, `rgba(255,255,255,${0.9 * t})`);
+  }
+
+  // Awards are checked on every hit and at the end of a game.
+  const awardQueue = [], AWARD_TIME = 2.2;
+  function checkAwards() {
+    const fair = mode !== 'zen'; // levels, points and combos come easy in Zen
+    const cond = {
+      first: state === STATE.GAME_OVER,
+      pentagon: fair && level >= 7,
+      score_100: fair && score >= 100,
+      combo_25: fair && streak >= 25,
+      octagon: fair && level >= 16,
+      specials: ['heart', 'jolly', 'slow', 'chameleon'].every(k => awardsRec.caught.includes(k)),
+      sprint_60: mode === 'sprint' && score >= 60,
+      combo_50: fair && streak >= 50,
+      zen_100: mode === 'zen' && hits >= 100,
+      hardcore_7: mode === 'hardcore' && level >= 7,
+      daily_7: dayStreak() >= 7,
+    };
+    for (const [id] of AWARDS) {
+      if (awardsRec.got[id] || !cond[id]) continue;
+      awardsRec.got[id] = Date.now();
+      awardQueue.push({ text: tr('award_unlocked', TEXT[lang].award_list[id][0]), time: AWARD_TIME });
+      if (awardQueue.length === 1) sfx.play('figure');
+    }
+    saveJSON(AWARDS_KEY, awardsRec);
+  }
+  const awardName = reward => {
+    const [id] = AWARDS.find(([, r]) => r === reward) || [];
+    return id ? TEXT[lang].award_list[id][0] : '';
+  };
+  const rewardName = reward => {
+    const [kind, id] = reward.split(':');
+    return `${tr(kind)} ${TEXT[lang][kind === 'theme' ? 'themes' : 'trails'][id]}`;
+  };
+
+  // --- Figure ---------------------------------------------------------------
+  const shape = {
+    sides: 3, colors: [], turns: 0, baseAngle: 0, rotation: 0, scale: 1,
+    tween: null, pulseT: -1,
+    step() { return TAU / this.sides; },
+    setup(n) {
+      this.sides = n; this.colors = PALETTE.slice(0, n); this.turns = 0;
+      this.tween = null; this.rotation = 0; this.baseAngle = bestBaseAngle(n);
+    },
+    // dir: 1 = clockwise (on screen), -1 = counter-clockwise.
+    rotateStep(dir = 1) {
+      this.turns += dir;
+      this.tween = { from: this.rotation, to: this.turns * this.step(), t: 0 };
+    },
+    pulse() { this.pulseT = 0; },
+    update(dt) {
+      if (this.tween) {
+        const tw = this.tween; tw.t += dt;
+        const k = Math.min(tw.t / TURN_TIME, 1);
+        this.rotation = tw.from + (tw.to - tw.from) * backOut(k);
+        if (k >= 1) this.tween = null;
+      }
+      if (this.pulseT >= 0) {
+        const p = (this.pulseT += dt);
+        if (p < 0.06) this.scale = 1 + 0.1 * p / 0.06;
+        else if (p < 0.16) this.scale = 1.1 - 0.1 * (p - 0.06) / 0.1;
+        else { this.scale = 1; this.pulseT = -1; }
+      }
+    },
+    // Uses the logical rotation, so a turn counts immediately even while animating.
+    sideAt(a) {
+      const local = a - this.turns * this.step() - this.baseAngle;
+      return Math.floor(fposmod(local, TAU) / this.step()) % this.sides;
+    },
+    edgeDistance(a) {
+      const i = this.sideAt(a);
+      const normal = this.baseAngle + (i + 0.5) * this.step() + this.turns * this.step();
+      return SHAPE_RADIUS * Math.cos(Math.PI / this.sides) / Math.cos(angleDiff(normal, a));
+    },
+    draw(cx, cy) {
+      const n = this.sides, st = this.step();
+      const verts = [];
+      for (let k = 0; k < n; k++) {
+        const a = this.baseAngle + k * st;
+        verts.push([Math.cos(a) * SHAPE_RADIUS, Math.sin(a) * SHAPE_RADIUS]);
+      }
+      ctx.save();
+      ctx.translate(cx, cy); ctx.rotate(this.rotation); ctx.scale(this.scale, this.scale);
+      const tri = (a, b, s) => {
+        ctx.beginPath(); ctx.moveTo(0, 0);
+        ctx.lineTo(a[0] * s, a[1] * s); ctx.lineTo(b[0] * s, b[1] * s); ctx.closePath();
+      };
+      for (const [s, al] of [[1.2, 0.07], [1.1, 0.14]]) {
+        for (let i = 0; i < n; i++) {
+          tri(verts[i], verts[(i + 1) % n], s);
+          ctx.fillStyle = rgba(this.colors[i], al); ctx.fill();
+        }
+      }
+      for (let i = 0; i < n; i++) {
+        const a = verts[i], b = verts[(i + 1) % n], c = this.colors[i];
+        const g = ctx.createLinearGradient(0, 0, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+        g.addColorStop(0, rgba(darkened(c, 0.5))); g.addColorStop(1, rgba(c));
+        tri(a, b, 1); ctx.fillStyle = g; ctx.fill();
+      }
+      ctx.lineCap = 'round';
+      for (let i = 0; i < n; i++) {
+        const a = verts[i], b = verts[(i + 1) % n];
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+        ctx.strokeStyle = rgba(lightened(this.colors[i], 0.35)); ctx.lineWidth = 6; ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(13,13,23,0.55)'; ctx.lineWidth = 3;
+      for (const v of verts) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(v[0], v[1]); ctx.stroke(); }
+      if (symbolsOn) {
+        // Each side's symbol, kept upright while the shape turns.
+        const d = SHAPE_RADIUS * Math.cos(Math.PI / n) * 0.64;
+        for (let i = 0; i < n; i++) {
+          const a = this.baseAngle + (i + 0.5) * st;
+          ctx.save(); ctx.translate(Math.cos(a) * d, Math.sin(a) * d); ctx.rotate(-this.rotation);
+          drawSymbol(SYMBOLS[PALETTE.indexOf(this.colors[i])], 0, 0, 12, rgba(INK, 0.85));
+          ctx.restore();
+        }
+      }
+      ctx.beginPath(); ctx.arc(0, 0, 18, 0, TAU);
+      ctx.fillStyle = 'rgb(18,18,26)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.restore();
+    },
+  };
+
+  // Balls arrive along the 4 screen axes. Pick a vertex offset that keeps every
+  // vertex (in every rotation step) as far as possible from those axes.
+  function bestBaseAngle(n) {
+    const step = TAU / n;
+    let best = 0, bestScore = -1;
+    for (let d = 0; d < 360; d++) {
+      const a = (d * Math.PI / 180) * step / TAU;
+      let score = Infinity;
+      for (let k = 0; k < n; k++) {
+        const v = fposmod(a + k * step, Math.PI / 2);
+        score = Math.min(score, v, Math.PI / 2 - v);
+      }
+      if (score > bestScore + 0.0001) { bestScore = score; best = a; }
+    }
+    return best;
+  }
+
+  // --- Sound ----------------------------------------------------------------
+  // Same synthesis as sfx.gd: every sound is rendered once into a buffer.
+  const RATE = 22050;
+  const PENTA = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66, 1318.51];
+  const sfx = {
+    muted: (() => { try { return localStorage.getItem(MUTE_KEY) === '1'; } catch { return false; } })(),
+    ctx: null, buffers: {}, chimes: [],
+    // Browsers only allow audio after a user gesture: called from input handlers.
+    unlock() {
+      if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      try { this.ctx = new AC(); } catch { return; }
+      const buf = samples => {
+        const fade = Math.min(Math.floor(0.005 * RATE), samples.length);
+        for (let i = samples.length - fade; i < samples.length; i++) samples[i] *= (samples.length - 1 - i) / fade;
+        const b = this.ctx.createBuffer(1, samples.length, RATE);
+        b.getChannelData(0).set(samples.map(v => clamp(v, -1, 1)));
+        return b;
+      };
+      this.buffers.turn_left = buf(blip(540, 400, 0.06, 0.02, 0.3));
+      this.buffers.turn_right = buf(blip(640, 480, 0.06, 0.02, 0.3));
+      this.buffers.click = buf(blip(900, 600, 0.05, 0.015, 0.25));
+      this.buffers.miss = buf(buzz(170, 60, 0.32, 0.12, 0.45));
+      this.buffers.level = buf(arp([659.25, 783.99, 1046.5], 0.08, 0.3, 0.1, 0.3, 0.3));
+      this.buffers.combo = buf(arp([783.99, 1046.5, 1318.51, 1567.98], 0.05, 0.25, 0.08, 0.26, 0.3));
+      this.buffers.power = buf(arp([1046.5, 1567.98, 2093], 0.04, 0.3, 0.1, 0.22, 0.2));
+      this.buffers.switch = buf(blip(700, 1200, 0.08, 0.03, 0.22));
+      this.buffers.soft = buf(blip(330, 220, 0.18, 0.07, 0.22)); // a miss in Zen
+      this.buffers.figure = buf(arp([523.25, 659.25, 783.99, 1046.5, 1318.51], 0.07, 0.35, 0.12, 0.28, 0.3));
+      this.buffers.game_over = buf(arp([392, 311.13, 261.63, 196], 0.16, 0.4, 0.18, 0.35, 0.5));
+      this.chimes = PENTA.map(f => buf(blip(f, f, 0.35, 0.12, 0.35, 0.3)));
+      music.init(this.ctx, buf);
+    },
+    playBuffer(b) {
+      if (this.muted || !this.ctx || !b) return;
+      const src = this.ctx.createBufferSource();
+      src.buffer = b; src.connect(this.ctx.destination); src.start();
+    },
+    play(name) { this.playBuffer(this.buffers[name]); },
+    // Hit sound; `step` is the current streak, so a run of hits climbs the scale.
+    chime(step) { this.playBuffer(this.chimes[clamp(step, 0, this.chimes.length - 1)]); },
+  };
+  const env = (t, attack, decay) => Math.min(t / attack, 1) * Math.exp(-t / decay);
+  function blip(f0, f1, dur, decay, amp, harm = 0) {
+    const n = Math.floor(dur * RATE), out = new Float32Array(n);
+    let phase = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / RATE;
+      phase += TAU * lerp(f0, f1, t / dur) / RATE;
+      out[i] = (Math.sin(phase) + harm * Math.sin(2 * phase)) * amp * env(t, 0.003, decay);
+    }
+    return out;
+  }
+  function buzz(f0, f1, dur, decay, amp) {
+    const n = Math.floor(dur * RATE), out = new Float32Array(n);
+    let phase = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / RATE;
+      phase += TAU * lerp(f0, f1, t / dur) / RATE;
+      const s = Math.sin(phase) + 0.5 * Math.sin(2 * phase) + 0.33 * Math.sin(3 * phase) + rand(-0.15, 0.15);
+      out[i] = s * amp * 0.6 * env(t, 0.005, decay);
+    }
+    return out;
+  }
+  function arp(freqs, gap, noteDur, decay, amp, harm) {
+    const out = new Float32Array(Math.floor((gap * (freqs.length - 1) + noteDur) * RATE));
+    freqs.forEach((f, k) => {
+      const note = blip(f, f, noteDur, decay, amp, harm), off = Math.floor(k * gap * RATE);
+      for (let i = 0; i < note.length; i++) out[off + i] += note[i];
+    });
+    return out;
+  }
+  function toggleSound() {
+    sfx.muted = !sfx.muted;
+    try { localStorage.setItem(MUTE_KEY, sfx.muted ? '1' : '0'); } catch {}
+    sfx.play('click');
+  }
+
+  function applyLanguage() {
+    document.documentElement.lang = lang;
+    canvas.setAttribute('aria-label', tr('aria'));
+    nameInput.placeholder = tr('name_hint');
+    nameInput.setAttribute('aria-label', tr('name_label'));
+  }
+  function toggleLanguage() {
+    lang = LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length];
+    try { localStorage.setItem(LANG_KEY, lang); } catch {}
+    applyLanguage();
+    sfx.play('click');
+  }
+
+  function toggleMusic() {
+    music.muted = !music.muted;
+    try { localStorage.setItem(MUSIC_KEY, music.muted ? '1' : '0'); } catch {}
+    music.updateMaster();
+    sfx.play('click');
+  }
+
+  // --- Music ----------------------------------------------------------------
+  // Soft synth-pop in A minor / C major, same parts and numbers as music.gd.
+  const STEPS_PER_BAR = 16, BARS = 4, MENU_BPM = 92, DUCKED = 0.3, OUT_GAIN = 0.5;
+  const LAYER = { PAD: 0, BASS: 1, DRUMS: 2, ARP: 3, LEAD: 4, CLAP: 5 };
+  // Am - F - C - G, one chord per bar (MIDI notes).
+  const CHORDS = [[57, 60, 64], [53, 57, 60], [55, 60, 64], [55, 59, 62]];
+  const ROOTS = [45, 41, 48, 43];
+  const ARP_STEPS = [0, 1, 2, 3, 2, 1, 2, 3, 0, 1, 2, 3, 2, 1, 2, 1];
+  // Lead melody over the 4 bars: step in the loop -> MIDI note.
+  const LEAD = {
+    0: 76, 4: 74, 6: 72, 8: 69, 12: 72, 14: 74,
+    16: 72, 20: 69, 24: 72, 26: 74, 28: 76,
+    32: 79, 36: 76, 38: 74, 40: 72, 44: 76, 46: 79,
+    48: 74, 52: 76, 54: 74, 56: 74, 60: 71, 62: 74,
+  };
+  const midiFreq = m => 440 * 2 ** ((m - 69) / 12);
+  const arpNote = (bar, s) => {
+    const c = CHORDS[bar];
+    return [c[0] + 12, c[1] + 12, c[2] + 12, c[0] + 24][ARP_STEPS[s]];
+  };
+
+  // A plucked or held note: harmonics[k] is the level of harmonic k + 1.
+  function tone(f, dur, attack, decay, amp, harmonics) {
+    const n = Math.floor(dur * RATE), out = new Float32Array(n), inc = TAU * f / RATE;
+    for (let i = 0; i < n; i++) {
+      let v = 0;
+      harmonics.forEach((h, k) => { v += h * Math.sin(inc * i * (k + 1)); });
+      out[i] = v * amp * env(i / RATE, attack, decay);
+    }
+    return out;
+  }
+  // Soft chord pad: two slightly detuned oscillators for a chorus effect.
+  function padChord(notes) {
+    const n = Math.floor(2.8 * RATE), out = new Float32Array(n);
+    for (const m of notes) {
+      const i1 = TAU * midiFreq(m) / RATE, i2 = i1 * 1.004;
+      for (let i = 0; i < n; i++) {
+        const a = i1 * i, b = i2 * i;
+        out[i] += (Math.sin(a) + 0.35 * Math.sin(2 * a) + Math.sin(b) + 0.15 * Math.sin(3 * b)) * 0.045 * env(i / RATE, 0.35, 1.6);
+      }
+    }
+    return out;
+  }
+  // Lead voice with a gentle vibrato that fades in.
+  function leadNote(f) {
+    const n = Math.floor(0.7 * RATE), out = new Float32Array(n);
+    let phase = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / RATE;
+      phase += TAU * f * (1 + 0.004 * Math.sin(TAU * 5.5 * t) * Math.min(t / 0.15, 1)) / RATE;
+      out[i] = (Math.sin(phase) + 0.25 * Math.sin(2 * phase) + 0.1 * Math.sin(3 * phase)) * 0.14 * env(t, 0.01, 0.3);
+    }
+    return out;
+  }
+  function sweep(f0, f1, dur, decay, amp) {
+    const n = Math.floor(dur * RATE), out = new Float32Array(n);
+    let phase = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / RATE;
+      phase += TAU * lerp(f0, f1, t / dur) / RATE;
+      out[i] = Math.sin(phase) * amp * env(t, 0.003, decay);
+    }
+    return out;
+  }
+  // Noise burst; `bright` keeps only the highs (hi-hat) instead of the full band (clap).
+  function noise(dur, decay, amp, bright) {
+    const n = Math.floor(dur * RATE), out = new Float32Array(n);
+    let prev = 0;
+    for (let i = 0; i < n; i++) {
+      const x = rand(-1, 1);
+      out[i] = (bright ? x - prev : x) * amp * env(i / RATE, 0.002, decay);
+      prev = x;
+    }
+    return out;
+  }
+
+  const music = {
+    muted: (() => { try { return localStorage.getItem(MUSIC_KEY) === '1'; } catch { return false; } })(),
+    ctx: null, out: null, layers: [], targets: [0, 0, 0, 0, 0, 0], b: null,
+    playing: false, ducked: false, bpm: MENU_BPM, step: 0, nextTime: 0,
+    // Called once the audio context exists (after the first user gesture).
+    init(ctx, buf) {
+      this.ctx = ctx;
+      this.out = ctx.createGain(); this.out.gain.value = 0; this.out.connect(ctx.destination);
+      this.layers = this.targets.map(() => {
+        const g = ctx.createGain(); g.gain.value = 0; g.connect(this.out); return g;
+      });
+      const b = this.b = { pad: CHORDS.map(c => buf(padChord(c))), bass: {}, arp: {}, lead: {} };
+      for (const r of ROOTS) for (const m of [r, r + 12])
+        b.bass[m] = buf(tone(midiFreq(m), 0.4, 0.005, 0.18, m === r ? 0.32 : 0.28, [1, 0.5, 0.25]));
+      for (let bar = 0; bar < BARS; bar++) for (let s = 0; s < STEPS_PER_BAR; s++) {
+        const m = arpNote(bar, s);
+        b.arp[m] ||= buf(tone(midiFreq(m), 0.3, 0.002, 0.07, 0.1, [1, 0.3]));
+      }
+      for (const m of Object.values(LEAD)) b.lead[m] ||= buf(leadNote(midiFreq(m)));
+      b.kick = buf(sweep(150, 45, 0.25, 0.12, 0.5));
+      b.hat = buf(noise(0.05, 0.015, 0.07, true));
+      b.clap = buf(noise(0.15, 0.05, 0.12, false));
+      this.applyLayers(); this.updateMaster();
+      this.nextTime = ctx.currentTime + 0.05;
+      setInterval(() => this.tick(), 25);
+    },
+    // Calm version for the menu: pad, a little bass and the arpeggio.
+    playMenu() { this.begin(); this.slow = false; this.bpm = MENU_BPM; this.setLayers([1, 0.6, 0, 0.7, 0, 0]); },
+    // One more instrument with every new figure (tier), a bit faster every level.
+    playGame(lvl, t) { this.begin(); this.slow = false; this.setLevel(lvl, t); },
+    setLevel(lvl, t) {
+      this.gameBpm = Math.min(100 + 2 * (lvl - 1), 128);
+      this.bpm = this.gameBpm * (this.slow ? 0.75 : 1);
+      this.setLayers([1, 1, t >= 1, t >= 2, t >= 3, t >= 4].map(Number));
+    },
+    setSlow(on) { this.slow = on; this.bpm = this.gameBpm * (on ? 0.75 : 1); },
+    setDucked(on) { this.ducked = on; this.updateMaster(); },
+    // Fades out; the next play* starts again from the first bar.
+    stop() { this.playing = false; this.updateMaster(); },
+    begin() {
+      if (!this.playing) { this.step = 0; if (this.ctx) this.nextTime = this.ctx.currentTime + 0.05; }
+      this.playing = true; this.ducked = false; this.updateMaster();
+    },
+    setLayers(t) { this.targets = t; this.applyLayers(); },
+    applyLayers() {
+      if (!this.ctx) return;
+      this.layers.forEach((g, i) => g.gain.setTargetAtTime(this.targets[i], this.ctx.currentTime, 0.25));
+    },
+    updateMaster() {
+      if (!this.ctx) return;
+      const v = this.muted || !this.playing ? 0 : (this.ducked ? DUCKED : 1) * OUT_GAIN;
+      this.out.gain.setTargetAtTime(v, this.ctx.currentTime, 0.2);
+    },
+    // Look-ahead scheduler: queues the 16ths due in the next ~120 ms.
+    tick() {
+      const now = this.ctx.currentTime;
+      if (!this.playing || this.muted || this.nextTime < now - 0.2) {
+        // Silent, or the tab was frozen: don't try to catch up.
+        this.nextTime = Math.max(this.nextTime, now + 0.05);
+        if (!this.playing || this.muted) return;
+      }
+      while (this.nextTime < now + 0.12) {
+        this.trigger(this.step, this.nextTime);
+        this.step = (this.step + 1) % (STEPS_PER_BAR * BARS);
+        this.nextTime += 60 / this.bpm / 4;
+      }
+    },
+    trigger(step, when) {
+      const bar = Math.floor(step / STEPS_PER_BAR), s = step % STEPS_PER_BAR, b = this.b;
+      if (s === 0) this.voice(b.pad[bar], LAYER.PAD, when);
+      if (s % 2 === 0) this.voice(b.bass[ROOTS[bar] + (s === 6 || s === 14 ? 12 : 0)], LAYER.BASS, when);
+      if (s === 0 || s === 8) this.voice(b.kick, LAYER.DRUMS, when);
+      if (s % 4 === 2) this.voice(b.hat, LAYER.DRUMS, when);
+      if (s === 4 || s === 12) this.voice(b.clap, LAYER.CLAP, when);
+      this.voice(b.arp[arpNote(bar, s)], LAYER.ARP, when);
+      if (LEAD[step]) this.voice(b.lead[LEAD[step]], LAYER.LEAD, when);
+    },
+    // Silent layers don't start new notes.
+    voice(buffer, layer, when) {
+      if (this.targets[layer] <= 0 && this.layers[layer].gain.value < 0.001) return;
+      const src = this.ctx.createBufferSource();
+      src.buffer = buffer; src.connect(this.layers[layer]); src.start(when);
+    },
+  };
+
+  // --- Leaderboard ----------------------------------------------------------
+  // Online on claude.ai: one document per player, scores/<user id> =
+  // {score, level, at}; names are resolved from the id at render time, never
+  // stored. Anywhere else (GitHub Pages, the app) it is the global board of
+  // server/, with a local top 10 in localStorage while offline.
+  const LOCAL_KEY = 'color-spin-top';
+  const board = {
+    status: 'loading', // loading | ready (claude.ai) | global | local
+    rows: [],          // what the leaderboard shows, sorted, top TOP_SIZE
+    localRows: (() => { try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch { return []; } })(),
+    names: {},
+    myId: null, myBest: 0, db: null, user: null, writing: Promise.resolve(),
+    localHighlight: -1, // row of the last local game, -1 = none
+    me: null,           // global board: {rank, name, score, level} of this device's player
+  };
+  function useLocalBoard() {
+    board.status = 'local';
+    board.rows = board.localRows;
+  }
+  // Inserts this game into the local top list; returns its rank (0 = not ranked).
+  function recordLocal(s, lvl) {
+    board.localHighlight = -1;
+    if (s <= 0) return 0;
+    let i = 0;
+    const rows = board.localRows;
+    while (i < rows.length && rows[i].score >= s) i++;
+    if (i >= TOP_SIZE) return 0;
+    const d = new Date(), pad = n => String(n).padStart(2, '0');
+    rows.splice(i, 0, { id: `local-${Date.now()}`, score: s, level: lvl, name: playerName,
+      date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` });
+    rows.length = Math.min(rows.length, TOP_SIZE);
+    saveLocalBoard();
+    board.localHighlight = i;
+    return i + 1;
+  }
+  function saveLocalBoard() {
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(board.localRows)); } catch {}
+  }
+
+  // --- Name field (local leaderboard only) ------------------------------------
+  // A real <input> over the canvas, so phones bring up their keyboard.
+  const nameInput = document.getElementById('name');
+  let playerName = (() => { try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; } })();
+  let nameShown = false;
+  nameInput.addEventListener('input', () => {
+    playerName = nameInput.value.trim();
+    try { localStorage.setItem(NAME_KEY, playerName); } catch {}
+    if (board.localHighlight >= 0) { board.localRows[board.localHighlight].name = playerName; saveLocalBoard(); }
+    if (board.status === 'global') {
+      net.nameDirty = true;
+      clearTimeout(net.nameTimer); net.nameTimer = setTimeout(syncGlobal, 1200);
+    }
+  });
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') nameInput.blur(); });
+  function showNameInput() {
+    nameInput.value = playerName; nameShown = true;
+    nameInput.style.display = 'block'; nameInput.style.opacity = '0';
+  }
+  function hideNameInput() {
+    if (!nameShown) return;
+    nameShown = false; nameInput.blur(); nameInput.style.display = 'none';
+  }
+  // Right under the rank line; the buttons move down to make room for it.
+  const nameField = () => ({ x: W / 2 - 170, y: H * 0.62 - 6, w: 340, h: 66 });
+  function placeNameInput(alpha) {
+    const c = canvas.getBoundingClientRect(), f = nameField();
+    Object.assign(nameInput.style, {
+      left: `${c.left + f.x * scale}px`, top: `${c.top + f.y * scale}px`,
+      width: `${f.w * scale}px`, height: `${f.h * scale}px`,
+      fontSize: `${30 * scale}px`, borderRadius: `${20 * scale}px`, padding: `0 ${20 * scale}px`,
+      opacity: String(alpha),
+    });
+  }
+
+  async function initBoard() {
+    const cl = window.claude;
+    const [db, user] = cl && cl.use ? await Promise.all([cl.use('db'), cl.use('user')]) : [null, null];
+    if (!db) {
+      useLocalBoard(); refreshGlobal(); syncGlobal();
+      for (const rb of Object.values(modeBoards)) { refreshRemote(rb); syncRemote(rb); }
+      return;
+    }
+    board.db = db; board.user = user;
+    board.myId = user ? await user.id() : null;
+    if (board.myId) {
+      try {
+        const snap = await db.doc(`scores/${board.myId}`).get();
+        if (snap.exists) board.myBest = Number(snap.data().score) || 0;
+      } catch {}
+    }
+    db.collection('scores').orderBy('score', 'desc').limit(TOP_SIZE).onSnapshot(snap => {
+      board.rows = snap.docs.map(d => ({ id: d.id, score: Number(d.data().score) || 0, level: Number(d.data().level) || 1 }));
+      board.status = 'ready';
+      refreshNames();
+    }, () => { if (board.status === 'loading') useLocalBoard(); });
+    for (const rb of Object.values(modeBoards)) initClaudeBoard(rb);
+  }
+  async function refreshNames(rows = board.rows) {
+    if (!board.user || !rows.length) return;
+    const ps = await board.user.profiles(rows.map(r => r.id));
+    for (const id in ps) board.names[id] = ps[id].name;
+  }
+  // The daily and 60-second boards on claude.ai: one document per player,
+  // daily/<user id> = {day, score, level, at} (their best of that day) and
+  // sprint/<user id> and hardcore/<user id> = {score, level, at}.
+  async function initClaudeBoard(rb) {
+    const day = today(), isDaily = rb === daily;
+    Object.assign(rb, { source: 'claude', day, status: 'loading' });
+    if (board.myId) {
+      try {
+        const snap = await board.db.doc(`${rb.kind}/${board.myId}`).get();
+        if (snap.exists && (!isDaily || snap.data().day === day)) rb.myBest = Number(snap.data().score) || 0;
+      } catch {}
+    }
+    let q = board.db.collection(rb.kind);
+    if (isDaily) q = q.where('day', '==', day);
+    q.orderBy('score', 'desc').limit(TOP_SIZE).onSnapshot(snap => {
+      rb.rows = snap.docs.map(d => ({ id: d.id, score: Number(d.data().score) || 0, level: Number(d.data().level) || 1, mine: d.id === board.myId }));
+      const i = rb.rows.findIndex(r => r.mine);
+      rb.me = i >= 0 ? { rank: i + 1 } : null;
+      rb.status = 'ok';
+      refreshNames(rb.rows);
+    }, () => { rb.status = 'offline'; });
+  }
+  function submitClaudeBoard(rb, s, lvl) {
+    if (!board.myId || s <= rb.myBest) return;
+    rb.myBest = s;
+    const doc = { ...(rb === daily ? { day: gameDay } : {}), score: s, level: lvl, at: Date.now() };
+    board.writing = board.writing.then(() => board.db.doc(`${rb.kind}/${board.myId}`).set(doc)).catch(() => {});
+  }
+  function submitScore(s, lvl) {
+    if (!board.db || !board.myId || s <= board.myBest) return;
+    board.myBest = s;
+    // One write at a time to the player's document.
+    board.writing = board.writing.then(() =>
+      board.db.doc(`scores/${board.myId}`).set({ score: s, level: lvl, at: Date.now() })
+    ).catch(() => {});
+  }
+  // Position this score would take among the other players (0 = outside the top).
+  function onlineRank(s) {
+    if (board.status !== 'ready' || s <= 0) return 0;
+    const better = board.rows.filter(r => r.id !== board.myId && r.score > s).length;
+    return better < TOP_SIZE ? better + 1 : 0;
+  }
+
+  // --- Global leaderboard (server/) ---------------------------------------------
+  // Each device is an anonymous player with a random id; the server keeps its
+  // best game and its name. A game that could not be sent (offline) waits in
+  // localStorage and goes out with the next successful sync.
+  const SCORES_URL = 'https://scores.espertini.com/v1/scores';
+  const PLAYER_KEY = 'color-spin-player', PENDING_KEY = 'color-spin-pending';
+  const RETRY_GAP = 2500; // the server takes one write every 2 s per player
+  const net = {
+    player: (() => {
+      try {
+        let id = localStorage.getItem(PLAYER_KEY);
+        if (!/^[0-9a-f]{32}$/.test(id || '')) {
+          id = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+          localStorage.setItem(PLAYER_KEY, id);
+        }
+        return id;
+      } catch { return null; }
+    })(),
+    pending: (() => { try { return JSON.parse(localStorage.getItem(PENDING_KEY)); } catch { return null; } })(),
+    lastGame: null, nameDirty: false, nameTimer: 0, busy: false,
+  };
+  const savePending = () => {
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify(net.pending)); } catch {}
+  };
+  function applyGlobal(data) {
+    if (!data || !Array.isArray(data.top)) return;
+    board.status = 'global';
+    board.rows = data.top.map(r => ({ name: r.name, score: r.score, level: r.level, mine: !!r.you }));
+    board.me = data.me;
+  }
+  async function refreshGlobal() {
+    if (!net.player) return;
+    try {
+      const res = await fetch(`${SCORES_URL}?player=${net.player}`);
+      if (res.ok) applyGlobal(await res.json());
+    } catch {} // offline: the local board stays
+  }
+  // Queues a finished game for the global board (only if it beats the player's best).
+  function submitGlobal(s, lvl, n, duration) {
+    if (!net.player || s <= 0 || s <= (board.me?.score || 0) || s <= (net.pending?.score || 0)) return false;
+    net.pending = net.lastGame = { score: s, level: lvl, hits: n, duration: Math.round(duration * 10) / 10 };
+    savePending();
+    syncGlobal();
+    return true;
+  }
+  // Sends the waiting game, or just the name when that changed.
+  async function syncGlobal() {
+    if (net.busy || !net.player) return;
+    const game = net.pending;
+    if (!game && !net.nameDirty) return;
+    net.busy = true; net.nameDirty = false;
+    let retry = false, offline = false;
+    try {
+      const res = await fetch(SCORES_URL, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player: net.player, name: playerName, ...(game || { score: 0, level: 1, hits: 0, duration: 0 }) }),
+      });
+      if (res.status === 429) { retry = true; if (!game) net.nameDirty = true; }
+      else {
+        if (res.ok) {
+          applyGlobal(await res.json());
+          if (game && game === net.lastGame && state === STATE.GAME_OVER && board.me) lastRank = board.me.rank;
+        }
+        // Sent, or refused by the server (it would be refused again): either way it's done.
+        if (res.ok || res.status < 500) { if (net.pending === game) { net.pending = null; savePending(); } }
+      }
+    } catch {
+      offline = true;
+      if (!game) net.nameDirty = true; // try again with the next game or launch
+    } finally {
+      net.busy = false;
+    }
+    // Rate limited, or a new game or name came in meanwhile.
+    if (retry || (!offline && ((net.pending && net.pending !== game) || net.nameDirty))) {
+      setTimeout(syncGlobal, RETRY_GAP);
+    }
+  }
+
+  // --- Daily challenge ----------------------------------------------------------
+  // The day is Italian time for everyone, so the challenge changes at midnight in Italy.
+  function today() {
+    try {
+      const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    } catch {}
+    return new Date().toISOString().slice(0, 10);
+  }
+  const dayNumber = day => Math.round((Date.parse(day) - Date.parse(DAILY_START)) / DAY_MS) + 1;
+  const twistFor = day => TWISTS[fposmod(dayNumber(day) - 1, TWISTS.length)];
+  const twistText = t => TEXT[lang].twists[t.id] || ['', ''];
+  const prevDay = day => new Date(Date.parse(day) - DAY_MS).toISOString().slice(0, 10);
+  // Deterministic random numbers (mulberry32) seeded from a string.
+  function seededRandom(seed) {
+    let h = 2166136261;
+    for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+    return () => {
+      h = (h + 0x6D2B79F5) | 0;
+      let t = Math.imul(h ^ (h >>> 15), 1 | h);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // This device's daily results: today's best and the run of days played in a row.
+  const dailyRec = (() => { try { return JSON.parse(localStorage.getItem(DAILY_KEY)) || {}; } catch { return {}; } })();
+  const todayBest = () => dailyRec.day === today() ? dailyRec.best || 0 : 0;
+  function dayStreak() {
+    const d = today();
+    return dailyRec.lastDay === d || dailyRec.lastDay === prevDay(d) ? dailyRec.streak || 0 : 0;
+  }
+  // Returns true when the game beats today's best.
+  function recordDaily(s) {
+    if (dailyRec.day !== gameDay) Object.assign(dailyRec, { day: gameDay, best: 0 });
+    if (dailyRec.lastDay !== gameDay) {
+      dailyRec.streak = dailyRec.lastDay === prevDay(gameDay) ? (dailyRec.streak || 0) + 1 : 1;
+      dailyRec.lastDay = gameDay;
+    }
+    const improved = s > dailyRec.best;
+    if (improved) dailyRec.best = s;
+    try { localStorage.setItem(DAILY_KEY, JSON.stringify(dailyRec)); } catch {}
+    return improved;
+  }
+
+  // The daily and 60-second boards: from the artifact's db on claude.ai, from server/ elsewhere.
+  const API_URL = 'https://scores.espertini.com/v1';
+  function remoteBoard(kind) {
+    const key = `color-spin-pending-${kind}`;
+    return {
+      kind, key, source: 'server', status: 'idle', // idle | loading | ok | offline
+      day: '', rows: [], me: null, players: 0, myBest: 0,
+      pending: (() => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } })(),
+      lastGame: null, busy: false,
+    };
+  }
+  const daily = remoteBoard('daily'), sprint = remoteBoard('sprint'), hardcore = remoteBoard('hardcore');
+  const modeBoards = { daily, sprint, hardcore };
+  const savePendingOf = rb => {
+    try { localStorage.setItem(rb.key, JSON.stringify(rb.pending)); } catch {}
+  };
+  function applyRemote(rb, data) {
+    if (!data || !Array.isArray(data.top) || (rb === daily && data.day !== daily.day)) return;
+    rb.rows = data.top.map(r => ({ name: r.name, score: r.score, level: r.level, mine: !!r.you }));
+    rb.me = data.me; rb.players = data.players || 0; rb.status = 'ok';
+  }
+  async function refreshRemote(rb) {
+    if (rb.source !== 'server') return;
+    let query = '';
+    if (rb === daily) {
+      const day = today();
+      if (daily.day !== day) Object.assign(daily, { day, rows: [], me: null, players: 0, status: 'loading' });
+      query = `day=${day}&`;
+    } else if (rb.status === 'idle') rb.status = 'loading';
+    if (!net.player) { rb.status = 'offline'; return; }
+    try {
+      const res = await fetch(`${API_URL}/${rb.kind}?${query}player=${net.player}`);
+      if (res.ok) applyRemote(rb, await res.json()); else if (rb.status !== 'ok') rb.status = 'offline';
+    } catch { if (rb.status !== 'ok') rb.status = 'offline'; }
+  }
+  function submitRemote(rb, s, lvl, n, duration) {
+    if (!net.player || s <= 0) return false;
+    rb.pending = rb.lastGame = { ...(rb === daily ? { day: gameDay } : {}), score: s, level: lvl, hits: n,
+      duration: Math.round(duration * 10) / 10 };
+    savePendingOf(rb);
+    syncRemote(rb);
+    return true;
+  }
+  // Same flow as syncGlobal; a name change goes through syncGlobal, and the
+  // server copies it to the other boards.
+  async function syncRemote(rb) {
+    if (rb.busy || !net.player || !rb.pending) return;
+    const game = rb.pending;
+    rb.busy = true;
+    let retry = false, offline = false;
+    try {
+      const res = await fetch(`${API_URL}/${rb.kind}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player: net.player, name: playerName, ...game }),
+      });
+      if (res.status === 429) retry = true;
+      else {
+        if (res.ok) applyRemote(rb, await res.json());
+        // Refused games are dropped; a 404 (older server) keeps it for later.
+        if (res.ok || (res.status < 500 && res.status !== 404)) { if (rb.pending === game) { rb.pending = null; savePendingOf(rb); } }
+      }
+    } catch {
+      offline = true;
+    } finally {
+      rb.busy = false;
+    }
+    if (retry || (!offline && rb.pending && rb.pending !== game)) setTimeout(() => syncRemote(rb), RETRY_GAP);
+  }
+
+  // --- Sharing --------------------------------------------------------------
+  // A square picture of the game just played: the shape it reached, the score
+  // and, for the daily challenge, its number, rule and rank.
+  function makeShareCard() {
+    const S = 1080, card = document.createElement('canvas');
+    card.width = card.height = S;
+    const main = ctx;
+    ctx = card.getContext('2d');
+    try {
+      const g = ctx.createLinearGradient(0, 0, 0, S);
+      g.addColorStop(0, rgba(BG_TOP)); g.addColorStop(1, rgba(BG_BOTTOM));
+      ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+      for (let i = 0; i < 70; i++) circle(Math.random() * S, Math.random() * S, rand(1, 3), 'rgba(255,255,255,0.08)');
+      for (let i = 0; i < 6; i++) circle(S / 2, 470, 230 + i * 45, 'rgba(255,255,255,0.015)');
+      // COLOR in the palette's colors, SPIN in white, like the menu.
+      ctx.font = `800 88px ${FONT}`;
+      const word = [...'COLOR'].map((ch, i) => [ch, PALETTE[i]]).concat([[' SPIN', WHITE]]);
+      let x = (S - word.reduce((w, [ch]) => w + ctx.measureText(ch).width, 0)) / 2;
+      for (const [ch, c] of word) { text(x, 130, ch, 88, c); x += ctx.measureText(ch).width; }
+      const n = dayNumber(gameDay);
+      const sub = mode === 'daily' ? `${tr('daily', n)}  ·  ${twistText(twist)[0]}`
+        : mode === 'sprint' || mode === 'hardcore' ? `${tr(`mode_${mode}`)}  ·  ${tr('card_classic')}` : tr('card_classic');
+      text(S / 2, 200, sub, 34, PALETTE[2], 1, 'center');
+      ctx.save(); ctx.translate(S / 2, 470); ctx.scale(1.6, 1.6); shape.draw(0, 0); ctx.restore();
+      text(S / 2, 860, String(score), 170, WHITE, 1, 'center');
+      text(S / 2, 915, tr('points_level', level, bestStreak), 30, WHITE, 0.6, 'center');
+      const rb = modeBoard();
+      if (rb && rb.me) text(S / 2, 965, rankText(rb), 32, PALETTE[2], 1, 'center');
+      const streakDays = mode === 'daily' ? dayStreak() : 0;
+      text(S / 2, 1040, streakDays >= 2 ? `${tr('daily_streak', streakDays)}  ·  ${SHARE_URL}` : SHARE_URL, 26, WHITE, 0.45, 'center');
+    } finally {
+      ctx = main;
+    }
+    return card;
+  }
+  // The board of the mode being played, when it has its own.
+  const modeBoard = () => modeBoards[mode] || null;
+  const rankText = rb => rb === daily
+    ? (rb.players ? tr('daily_rank_of', rb.me.rank, rb.players) : tr('daily_rank', rb.me.rank))
+    : (rb.players ? tr('rank_of', rb.me.rank, rb.players) : tr('rank', rb.me.rank));
+  function shareText() {
+    const t = mode === 'daily' ? tr('share_daily', dayNumber(gameDay), twistText(twist)[0], score)
+      : mode === 'sprint' || mode === 'hardcore' ? tr(`share_${mode}`, score) : tr('share_classic', score);
+    return `${t} https://${SHARE_URL}`;
+  }
+  async function share() {
+    const card = makeShareCard(), msg = shareText();
+    if (app) { tellApp({ type: 'share', image: card.toDataURL('image/png'), text: msg }); return; }
+    const blob = await new Promise(r => card.toBlob(r, 'image/png'));
+    const name = mode === 'daily' ? `color-spin-${gameDay}.png` : 'color-spin.png';
+    try {
+      const file = new File([blob], name, { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], text: msg });
+        return;
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return; // the player closed the share sheet
+    }
+    // No share sheet (desktop, or inside claude.ai): save the image and copy the text.
+    try { await navigator.clipboard.writeText(msg); } catch {}
+    const downloads = window.claude && window.claude.use ? await window.claude.use('downloads') : null;
+    try {
+      if (downloads) await downloads.save({ filename: name, data: blob });
+      else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = name; a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      }
+      showToast(tr('saved'));
+    } catch (e) {
+      if (!e || e.code !== 'declined') showToast(tr('share_failed'));
+    }
+  }
+  let toast = null;
+  const showToast = msg => { toast = { text: msg, time: 2.5 }; };
+
+  // --- Effects --------------------------------------------------------------
+  let particles = [], rings = [], texts = [];
+  function burst(x, y, color, count = 14, speed = 280) {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * TAU, sp = speed * rand(0.3, 1), life = rand(0.35, 0.7);
+      particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, color, size: rand(3, 7), life, max: life });
+    }
+  }
+  const ring = (x, y, color, from, to, dur = 0.35) => rings.push({ x, y, color, from, to, life: dur, max: dur });
+  const floatText = (x, y, text, color) => texts.push({ x, y, text, color, life: 0.7, max: 0.7 });
+  const clearFx = () => { particles = []; rings = []; texts = []; };
+
+  function updateFx(dt) {
+    for (const p of particles) {
+      p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      const drag = Math.max(1 - 3 * dt, 0); p.vx *= drag; p.vy *= drag;
+    }
+    for (const r of rings) r.life -= dt;
+    for (const t of texts) { t.life -= dt; t.y -= 70 * dt; }
+    particles = particles.filter(p => p.life > 0);
+    rings = rings.filter(r => r.life > 0);
+    texts = texts.filter(t => t.life > 0);
+  }
+
+  function drawFx(ox, oy) {
+    for (const r of rings) {
+      const t = 1 - r.life / r.max;
+      ctx.beginPath(); ctx.arc(ox + r.x, oy + r.y, lerp(r.from, r.to, 1 - (1 - t) ** 3), 0, TAU);
+      ctx.strokeStyle = rgba(r.color, 1 - t); ctx.lineWidth = 1 + 5 * (1 - t); ctx.stroke();
+    }
+    for (const p of particles) {
+      const t = p.life / p.max;
+      ctx.beginPath(); ctx.arc(ox + p.x, oy + p.y, p.size * t, 0, TAU);
+      ctx.fillStyle = rgba(p.color, t); ctx.fill();
+    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.font = `800 34px ${FONT}`;
+    for (const t of texts) {
+      ctx.fillStyle = rgba(t.color, clamp(t.life / t.max * 2, 0, 1));
+      ctx.fillText(t.text, ox + t.x, oy + t.y);
+    }
+  }
+
+  // --- Game state -----------------------------------------------------------
+  let state = STATE.MENU, score = 0, best = loadBest(), newBest = false;
+  let lives = MAX_LIVES, level = 1, spawnTimer = 0, menuTurnTimer = 0;
+  let shake = 0, flash = 0, fade = 0, scorePop = 0, banner = '', bannerTime = 0;
+  let gameOverTime = 0, pauseTime = 0, resumeTimer = 0, time = 0, worldX = 0, worldY = 0;
+  let streak = 0, arrowFlash = [0, 0], lastRank = 0, lastGameImproved = false, playTime = 0;
+  // hits: balls matched (they set the level); score adds the combo and bonus points.
+  let hits = 0, bestStreak = 0, comboPop = 0, slowTime = 0, hint = null;
+  // mode: 'classic' or 'daily'; rng drives the balls (seeded in the daily challenge).
+  let mode = 'classic', twist = NO_TWIST, rng = Math.random, gameDay = today(), maxLives = MAX_LIVES;
+  let boardTab = 'all'; // leaderboard screen: 'all', 'sprint' or 'today'
+  // The mode picked on the menu, and the 60-second clock.
+  let menuMode = (() => { try { return localStorage.getItem(MODE_KEY); } catch { return null; } })();
+  if (!MODES.includes(menuMode)) menuMode = 'classic';
+  let modeFlash = 0, pageScroll = 0, pageVel = 0, pageMax = 0;
+  let clock = 0;
+  // Records of the 60-second and hardcore modes (the classic one is `best`).
+  const records = {};
+  for (const m of ['sprint', 'hardcore']) {
+    try { records[m] = parseInt(localStorage.getItem(`color-spin-best-${m}`), 10) || 0; } catch { records[m] = 0; }
+  }
+  let seen = (() => { try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY)) || []); } catch { return new Set(); } })();
+  let balls = [];
+  let dots = [];
+
+  function loadBest() {
+    try { return parseInt(localStorage.getItem(SAVE_KEY), 10) || 0; } catch { return 0; }
+  }
+  function saveBest() {
+    try { localStorage.setItem(SAVE_KEY, String(best)); } catch {}
+  }
+
+  function goToMenu() {
+    hideNameInput();
+    balls = []; clearFx();
+    state = STATE.MENU; shape.setup(MENU_SIDES); menuTurnTimer = 1; fade = 1;
+    awardQueue.length = 0; // the awards page lists them anyway
+    music.playMenu();
+  }
+
+  function start(m = mode) {
+    hideNameInput();
+    mode = m; gameDay = today();
+    twist = mode === 'daily' ? twistFor(gameDay) : NO_TWIST;
+    rng = mode === 'daily' ? seededRandom(`color-spin-${gameDay}`) : Math.random;
+    maxLives = mode === 'hardcore' ? 1 : twist.lives || MAX_LIVES;
+    balls = []; clearFx();
+    score = 0; lives = maxLives; level = 1; newBest = false; spawnTimer = 1;
+    hits = 0; bestStreak = 0; comboPop = 0; slowTime = 0; hint = null;
+    streak = 0; lastRank = 0; lastGameImproved = false; playTime = 0;
+    state = STATE.PLAYING; fade = 1;
+    shape.setup(sidesForLevel(level));
+    music.playGame(...musicLevel());
+    clock = SPRINT_TIME;
+    if (mode === 'daily') {
+      showBanner(tr('daily', dayNumber(gameDay)));
+      const [title, line] = twistText(twist);
+      hint = { title, line, time: 3.5 };
+      refreshRemote(daily);
+    } else if (mode === 'sprint') {
+      hint = { title: tr('mode_sprint'), line: tr('mode_info_sprint'), time: 3.5 };
+      refreshRemote(sprint);
+    } else if (mode === 'zen' || mode === 'hardcore') {
+      hint = { title: tr(`mode_${mode}`), line: tr(`mode_info_${mode}`), time: 3.5 };
+      if (mode === 'hardcore') refreshRemote(hardcore);
+    } else showBanner(tr('banner_level', 1));
+  }
+  // Zen keeps the music calm: the first tempo and at most three instruments more.
+  const musicLevel = () => mode === 'zen' ? [1, Math.min(tier(level), 2)] : [level, tier(level)];
+  const hasLives = () => mode === 'classic' || mode === 'daily' || mode === 'hardcore';
+
+  const tier = lvl => Math.min(Math.floor((lvl - 1) / LEVELS_PER_SIDE), MAX_SIDES - MIN_SIDES);
+  const sidesForLevel = lvl => MIN_SIDES + tier(lvl);
+  function difficulty() {
+    const t = tier(level);
+    return 0.7 * t + 0.5 * (level - 1 - t * LEVELS_PER_SIDE);
+  }
+  // Zen stops getting faster at an easy pace; 60 seconds starts at a brisker one.
+  const pace = () => mode === 'zen' ? Math.min(difficulty(), ZEN_PACE)
+    : mode === 'sprint' ? difficulty() + SPRINT_BOOST
+    : mode === 'hardcore' ? difficulty() + HARDCORE_BOOST : difficulty();
+  const travelTime = () => Math.max(1, 2.9 - 0.25 * pace()) / (twist.speed || 1);
+  const spawnInterval = () => Math.max(0.5, 1.7 - 0.18 * pace());
+  const maxBalls = () => Math.min(level + 1, 3 + tier(level));
+  const multiplier = () => 1 + COMBO_STEPS.filter(n => streak >= n).length;
+
+  // Special balls, unlocked as the game goes on: [kind, from level, chance per ball].
+  // The chameleon keeps getting more frequent, so the game still changes past the octagon.
+  const SPECIALS = [
+    ['heart', 4, () => (mode === 'sprint' || lives < maxLives) && !balls.some(b => b.kind === 'heart') ? 0.05 : 0],
+    ['jolly', 7, () => 0.05],
+    ['slow', 10, () => slowTime > 0 || balls.some(b => b.kind === 'slow') ? 0 : 0.03],
+    ['chameleon', 16, from => Math.min(0.12 + 0.02 * (level - from), 0.4)],
+  ];
+  function pickSpecial(roll) {
+    let p = 0;
+    for (const [kind, usual, chance] of SPECIALS) {
+      // The rule of the day can bring a ball in earlier or make it more frequent.
+      // Zen has nothing to win back and no surprises.
+      if (mode === 'zen' && (kind === 'heart' || kind === 'chameleon')) continue;
+      if (mode === 'hardcore' && kind === 'heart') continue;
+      const [from, often] = mode === 'hardcore' && kind === 'chameleon' ? [10]
+        : (twist.special && twist.special[kind]) || [usual];
+      if (level < from) continue;
+      const c = chance(from);
+      p += often !== undefined && c > 0 ? often : c;
+      if (roll < p) return kind;
+    }
+    return null;
+  }
+  // The first time ever a special ball shows up, say what it does.
+  function introduce(kind) {
+    if (seen.has(kind)) return;
+    seen.add(kind);
+    try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seen])); } catch {}
+    const [title, line] = TEXT[lang].specials[kind];
+    hint = { title, line, time: 3.5 };
+  }
+  const showBanner = text => { banner = text; bannerTime = 1.2; };
+
+  function spawnBall() {
+    // Always four draws per ball, so the daily sequence stays the same for everyone.
+    const [dx, dy] = SPAWN_DIRS[rng() * 4 | 0];
+    const ci = rng() * shape.sides | 0, kind = pickSpecial(rng()), other = rng();
+    const dist = Math.abs(dx) * W / 2 + Math.abs(dy) * H / 2 + BALL_RADIUS;
+    const v = (dist - SHAPE_RADIUS) / travelTime();
+    // Same travel time from every edge, so a portrait screen stays fair.
+    const b = { kind, ci, color: PALETTE[ci], x: dx * dist, y: dy * dist, vx: -dx * v, vy: -dy * v, trail: [] };
+    // The chameleon switches color with 0.7 s left to react.
+    if (kind === 'chameleon') {
+      b.switchAt = SHAPE_RADIUS + v * 0.7;
+      b.switchTo = (ci + 1 + (other * (shape.sides - 1) | 0)) % shape.sides;
+    }
+    balls.push(b);
+    if (kind) introduce(kind);
+  }
+
+  function checkHits() {
+    for (const b of balls) {
+      if (b.dead) continue;
+      const angle = Math.atan2(b.y, b.x);
+      if (Math.hypot(b.x, b.y) - BALL_RADIUS > shape.edgeDistance(angle)) continue;
+      b.dead = true;
+      if (b.kind === 'jolly' || shape.sideAt(angle) === b.ci) onScore(b); else onMiss(b);
+      if (state !== STATE.PLAYING) break;
+    }
+    balls = balls.filter(b => !b.dead);
+  }
+
+  function onScore(b) {
+    const before = multiplier();
+    sfx.chime(streak); streak++; hits++;
+    bestStreak = Math.max(bestStreak, streak);
+    const mult = multiplier(), points = (b.kind === 'jolly' ? JOLLY_POINTS : 1) * mult;
+    score += points; scorePop = 1; shape.pulse();
+    const color = b.kind === 'jolly' ? jollyColor(b) : b.color;
+    burst(b.x, b.y, color); ring(b.x, b.y, color, 10, 70);
+    const len = Math.hypot(b.x, b.y) || 1;
+    floatText(b.x + b.x / len * 50, b.y + b.y / len * 50, `+${points}`, color);
+    if (mult > before) { comboPop = 1; sfx.play('combo'); showBanner(tr('banner_combo', mult)); }
+    if (b.kind === 'heart' && mode === 'sprint') {
+      clock += SPRINT_HEART; sfx.play('power'); showBanner(tr('banner_time', SPRINT_HEART));
+    } else if (b.kind === 'heart' && lives < maxLives) { lives++; sfx.play('power'); showBanner(tr('banner_heart')); }
+    if (b.kind === 'slow') { slowTime = SLOW_TIME; music.setSlow(true); sfx.play('power'); showBanner(tr('banner_slow')); }
+    if (b.kind === 'jolly') { sfx.play('power'); for (const c of shape.colors) burst(b.x, b.y, c, 3, 320); }
+    if (hits % POINTS_PER_LEVEL === 0) levelUp();
+    if (b.kind && !awardsRec.caught.includes(b.kind)) awardsRec.caught.push(b.kind);
+    checkAwards();
+  }
+
+  function onMiss(b) {
+    streak = 0;
+    if (mode === 'zen') { burst(b.x, b.y, [0.75, 0.75, 0.8], 8, 150); sfx.play('soft'); return; }
+    shake = 14; flash = 1;
+    burst(b.x, b.y, [0.75, 0.75, 0.8], 10, 200); ring(b.x, b.y, PALETTE[0], 10, 90);
+    if (mode === 'sprint') {
+      clock = Math.max(clock - SPRINT_MISS, 0);
+      floatText(b.x, b.y - 40, `-${SPRINT_MISS}s`, PALETTE[0]);
+      if (clock <= 0) gameOver(); else sfx.play('miss');
+      return;
+    }
+    lives--;
+    if (lives <= 0) gameOver(); else sfx.play('miss');
+  }
+
+  function levelUp() {
+    level++;
+    music.setLevel(...musicLevel());
+    const n = sidesForLevel(level);
+    if (n !== shape.sides) {
+      // New figure: clear the board, a moment to look at it, and a life back.
+      for (const b of balls) b.dead = true;
+      shape.setup(n);
+      sfx.play('figure');
+      ring(0, 0, WHITE, 60, 450, 0.6);
+      for (const c of shape.colors) burst(0, 0, c, 6, 420);
+      spawnTimer = 1.5;
+      if (lives < maxLives) { lives++; showBanner(tr('banner_life', level)); return; }
+    } else {
+      sfx.play('level');
+    }
+    showBanner(tr('banner_level', level));
+  }
+
+  function pause() {
+    state = STATE.PAUSED; pauseTime = 0; resumeTimer = 0;
+    sfx.play('click'); music.setDucked(true);
+  }
+
+  function gameOver() {
+    state = STATE.GAME_OVER; gameOverTime = 0;
+    finishGame();
+  }
+  function finishGame() {
+    try { recordGame(); } finally { checkAwards(); }
+  }
+  function recordGame() {
+    sfx.play('game_over'); music.stop();
+    for (const b of balls) b.dead = true;
+    for (const c of shape.colors) burst(0, 0, c, 10, 450);
+    if (slowTime > 0) { slowTime = 0; music.setSlow(false); }
+    if (mode === 'daily') {
+      // The daily challenge has its own records and board.
+      board.localHighlight = -1;
+      newBest = lastGameImproved = recordDaily(score);
+      if (!newBest) return;
+      if (daily.source === 'claude') submitClaudeBoard(daily, score, level);
+      else if (submitRemote(daily, score, level, hits, playTime)) showNameInput();
+      return;
+    }
+    if (mode === 'sprint' || mode === 'hardcore') {
+      // Their own record and board.
+      const rb = modeBoards[mode];
+      board.localHighlight = -1;
+      if (score > records[mode]) {
+        records[mode] = score; newBest = true;
+        try { localStorage.setItem(`color-spin-best-${mode}`, String(score)); } catch {}
+      }
+      if (rb.source === 'claude') submitClaudeBoard(rb, score, level);
+      else if (score > (rb.me?.score || 0) && score > (rb.pending?.score || 0) &&
+        submitRemote(rb, score, level, hits, playTime)) { lastGameImproved = true; showNameInput(); }
+      return;
+    }
+    if (score > best) { best = score; newBest = true; saveBest(); }
+    if (board.status === 'ready') {
+      lastGameImproved = board.myId !== null && score > board.myBest;
+      lastRank = lastGameImproved ? onlineRank(score) : 0;
+      submitScore(score, level);
+      return;
+    }
+    // The local top 10 keeps every game, for when the device is offline.
+    const localRank = recordLocal(score, level);
+    const queued = submitGlobal(score, level, hits, playTime);
+    if (board.status === 'global') {
+      // The global rank shows up when the server answers.
+      lastGameImproved = queued; lastRank = 0;
+      if (queued) showNameInput();
+    } else {
+      lastRank = localRank;
+      if (lastRank > 0) showNameInput();
+    }
+  }
+
+  // --- Input ----------------------------------------------------------------
+  // Play (with the mode arrows at its sides), the daily challenge under it,
+  // and the leaderboard as an icon next to the settings.
+  const menuButtons = () => {
+    const y = H / 2 + 236 + (H - BASE_H) * 0.3; // a bit lower on tall phones
+    return [
+      { x: W / 2 - 180, y, w: 360, h: 112 },
+      { x: W - 176, y: 24, w: 68, h: 68 },
+      { x: W / 2 - 200, y: y + 136, w: 400, h: 100 },
+      { x: W / 2 - 268, y: y + 18, w: 76, h: 76 },
+      { x: W / 2 + 192, y: y + 18, w: 76, h: 76 },
+      { x: 108, y: 24, w: 68, h: 68 },
+    ];
+  };
+  // Classic, 60 seconds, hardcore, today.
+  const BOARD_TABS = ['all', 'sprint', 'hardcore', 'today'];
+  const boardTabs = () => BOARD_TABS.map((t, i) => ({ x: W / 2 - 332 + i * 168, y: H * 0.1 + 30, w: 160, h: 56 }));
+
+  const settingsButton = () => ({ x: W - 92, y: 24, w: 68, h: 68 });
+  // Music, sounds, language, back.
+  // Music, sounds, language, symbols, back.
+  const settingsButtons = () => [0, 1, 2, 3, 4].map(i =>
+    ({ x: W / 2 - 260, y: H * 0.28 + i * 104 + (i === 4 ? 40 : 0), w: 520, h: 84 }));
+  let linkRect = { x: 0, y: 0, w: 0, h: 0 }; // the site link on the about screen, set when drawn
+  const infoButton = () => ({ x: 24, y: 24, w: 68, h: 68 });
+  // Top center, between the score and the lives.
+  const pauseButton = () => ({ x: W / 2 - 34, y: 22, w: 68, h: 68 });
+  const pauseButtons = () => [
+    { x: W / 2 - 150, y: H * 0.45, w: 300, h: 88 },
+    { x: W / 2 - 150, y: H * 0.45 + 108, w: 300, h: 88 },
+  ];
+  // Music and sound effects toggles, side by side under the pause buttons.
+  const pauseAudioButtons = () => [
+    { x: W / 2 - 84, y: H * 0.45 + 232, w: 68, h: 68 },
+    { x: W / 2 + 16, y: H * 0.45 + 232, w: 68, h: 68 },
+  ];
+
+  const grow = (r, k) => ({ x: r.x - k, y: r.y - k, w: r.w + 2 * k, h: r.h + 2 * k });
+  // Play again; then share and menu side by side.
+  const gameOverButtons = () => {
+    const y = H * 0.62 + (nameShown ? NAME_ROW : 0);
+    return [{ x: W / 2 - 210, y, w: 420, h: 88 }, { x: W / 2 + 8, y: y + 108, w: 202, h: 88 },
+      { x: W / 2 - 210, y: y + 108, w: 202, h: 88 }];
+  };
+  const hit = (r, p) => p && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+
+  function handle(action, pos) {
+    sfx.unlock();
+    if (action === 'music') { toggleMusic(); return; }
+    if (action === 'effects') { toggleSound(); return; }
+    if (action === 'language') { toggleLanguage(); return; }
+    if (state === STATE.MENU) {
+      if (action === 'tap' && hit(settingsButton(), pos)) {
+        sfx.play('click'); state = STATE.SETTINGS; fade = 0.6;
+      }
+      else if (action === 'tap' && hit(menuButtons()[1], pos)) {
+        sfx.play('click'); state = STATE.LEADERBOARD; fade = 0.6; refreshNames();
+        boardTab = BOARD_TABS.includes(menuMode) ? menuMode : 'all';
+        if (board.status === 'global' || board.status === 'local') { refreshGlobal(); syncGlobal(); }
+        for (const rb of Object.values(modeBoards)) { refreshRemote(rb); syncRemote(rb); }
+      } else if (action === 'tap' && hit(menuButtons()[5], pos)) {
+        sfx.play('click'); state = STATE.AWARDS; fade = 0.6; pageScroll = pageVel = 0;
+      } else if (action === 'tap' && hit(menuButtons()[2], pos)) {
+        start('daily');
+      } else if (action === 'left' || action === 'right' || (action === 'tap' && (hit(menuButtons()[3], pos) || hit(menuButtons()[4], pos)))) {
+        // The arrows (or the keyboard) go through the modes.
+        const dir = action === 'left' || (action === 'tap' && hit(menuButtons()[3], pos)) ? -1 : 1;
+        menuMode = MODES[fposmod(MODES.indexOf(menuMode) + dir, MODES.length)];
+        try { localStorage.setItem(MODE_KEY, menuMode); } catch {}
+        sfx.play(dir < 0 ? 'turn_left' : 'turn_right'); modeFlash = dir;
+      } else if (action === 'info' || (action === 'tap' && hit(infoButton(), pos))) {
+        sfx.play('click'); state = STATE.ABOUT; fade = 0.6; pageScroll = pageVel = 0;
+      } else if (action !== 'back') start(menuMode);
+    } else if (state === STATE.PLAYING) {
+      if (action === 'pause' || action === 'back' || (action === 'tap' && hit(grow(pauseButton(), 12), pos))) {
+        pause(); return;
+      }
+      let dir = 0;
+      if (action === 'left') dir = -1;
+      else if (action === 'right' || action === 'confirm') dir = 1;
+      else if (action === 'tap') dir = pos.x < W / 2 ? -1 : 1;
+      if (dir) {
+        shape.rotateStep(dir);
+        sfx.play(dir < 0 ? 'turn_left' : 'turn_right');
+        arrowFlash[dir < 0 ? 0 : 1] = 1;
+      }
+    } else if (state === STATE.PAUSED) {
+      if (resumeTimer > 0) return;
+      const b = pauseButtons();
+      const audio = pauseAudioButtons();
+      if (action === 'tap' && hit(audio[0], pos)) toggleMusic();
+      else if (action === 'tap' && hit(audio[1], pos)) toggleSound();
+      else if (['confirm', 'pause', 'back'].includes(action) || hit(b[0], pos)) {
+        sfx.play('click'); resumeTimer = RESUME_BEATS * RESUME_BEAT;
+      } else if (hit(b[1], pos)) {
+        // Leaving mid-game: the run is dropped, not recorded.
+        sfx.play('click'); goToMenu();
+      }
+    } else if (state === STATE.GAME_OVER) {
+      if (gameOverTime < 0.6) return;
+      const b = gameOverButtons();
+      if (action === 'confirm' || hit(b[0], pos)) { sfx.play('click'); start(); }
+      else if (hit(b[1], pos)) { sfx.play('click'); share(); }
+      else if (action === 'back' || hit(b[2], pos)) { sfx.play('click'); goToMenu(); }
+    } else if (state === STATE.SETTINGS) {
+      const rows = settingsButtons();
+      if (action === 'tap' && hit(rows[0], pos)) toggleMusic();
+      else if (action === 'tap' && hit(rows[1], pos)) toggleSound();
+      else if (action === 'tap' && hit(rows[2], pos)) toggleLanguage();
+      else if (action === 'tap' && hit(rows[3], pos)) toggleSymbols();
+      else if (action === 'back' || (action === 'tap' && hit(rows[4], pos))) {
+        sfx.play('click'); state = STATE.MENU; fade = 0.6;
+      }
+    } else if (state === STATE.LEADERBOARD && action === 'tap' && boardTabs().some(r => hit(r, pos))) {
+      sfx.play('click');
+      boardTab = BOARD_TABS[boardTabs().findIndex(r => hit(r, pos))];
+      const rb = boardTab === 'today' ? daily : modeBoards[boardTab];
+      if (rb) refreshRemote(rb);
+    } else if (scrolls() && (action === 'up' || action === 'down')) {
+      pageVel = 0; pageScroll = clamp(pageScroll + (action === 'up' ? -120 : 120), 0, pageMax);
+    } else if (state === STATE.AWARDS && action === 'tap' && pos.y < pageBottom() &&
+      lookRects.some(o => hit(o.r, { x: pos.x, y: pos.y + pageScroll }))) {
+      pickLook(lookRects.find(o => hit(o.r, { x: pos.x, y: pos.y + pageScroll })));
+    } else if (state === STATE.ABOUT && action === 'tap' && hit(linkRect, pos)) {
+      sfx.play('click'); openLink(SITE_URL);
+    } else {
+      // Any tap or key goes back: the whole screen is the "back" button.
+      sfx.play('click'); state = STATE.MENU; fade = 0.6;
+    }
+  }
+
+  const pointerPos = e => {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
+  };
+  // The About and awards pages scroll: there a tap is a release that didn't drag.
+  let drag = null;
+  const scrolls = () => state === STATE.ABOUT || state === STATE.AWARDS;
+  const pageBottom = () => H * 0.9 - 56;
+  canvas.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    canvas.focus({ preventScroll: true });
+    if (scrolls()) {
+      sfx.unlock();
+      drag = { pos: pointerPos(e), y: e.clientY, from: pageScroll, moved: false, last: e.clientY, t: performance.now() };
+      pageVel = 0;
+      try { canvas.setPointerCapture(e.pointerId); } catch {}
+      return;
+    }
+    handle('tap', pointerPos(e));
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dy = (e.clientY - drag.y) / scale, now = performance.now();
+    if (Math.abs(dy) > 10) drag.moved = true;
+    if (!drag.moved) return;
+    pageScroll = clamp(drag.from - dy, 0, pageMax);
+    const dt = Math.max((now - drag.t) / 1000, 0.001);
+    pageVel = -(e.clientY - drag.last) / scale / dt;
+    drag.last = e.clientY; drag.t = now;
+  });
+  const endDrag = e => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    if (e.type === 'pointerup' && !d.moved) handle('tap', d.pos);
+    else if (performance.now() - d.t > 80) pageVel = 0; // held still before letting go
+  };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('wheel', e => {
+    if (!scrolls()) return;
+    e.preventDefault();
+    pageVel = 0; pageScroll = clamp(pageScroll + e.deltaY / scale, 0, pageMax);
+  }, { passive: false });
+  const KEYS = {
+    ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right',
+    ' ': 'confirm', Enter: 'confirm', ArrowUp: 'confirm', Escape: 'back', m: 'music', M: 'music', s: 'effects', S: 'effects',
+    p: 'pause', P: 'pause', i: 'info', I: 'info', l: 'language', L: 'language',
+  };
+  window.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target === nameInput) return;
+    // Up and down scroll the About page.
+    const scroll = scrolls() && { ArrowUp: 'up', ArrowDown: 'down' }[e.key];
+    if (scroll) { e.preventDefault(); handle(scroll); return; }
+    if (e.repeat || !KEYS[e.key]) return;
+    if (e.key !== 'Escape') e.preventDefault();
+    handle(KEYS[e.key]);
+  });
+
+  // Leaving the page (tab switch, app switch, lost focus) pauses a running game.
+  function onLeave() {
+    if (state === STATE.PLAYING) pause();
+    else if (state === STATE.PAUSED) resumeTimer = 0; // back to the pause menu instead of resuming unattended
+  }
+  // Hidden tabs throttle timers: suspend audio instead of letting the music stutter.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { onLeave(); sfx.ctx?.suspend(); } else sfx.ctx?.resume();
+  });
+  window.addEventListener('blur', onLeave);
+
+  // --- Mobile app -------------------------------------------------------------
+  // Inside the app's WebView (mobile/App.js) links open in the phone's browser,
+  // and the app calls these hooks for the Android back button and for going to
+  // the background, where the WebView does not reliably fire visibilitychange.
+  const app = window.ReactNativeWebView;
+  const tellApp = msg => app.postMessage(JSON.stringify(msg));
+  function openLink(url) {
+    if (app) tellApp({ type: 'open', url });
+    else window.open(url, '_blank', 'noopener');
+  }
+  window.colorSpinApp = {
+    background() { onLeave(); sfx.ctx?.suspend(); },
+    foreground() { sfx.ctx?.resume(); },
+    // Back works like Esc, except that on the main menu it closes the app.
+    back() {
+      if (nameShown && document.activeElement === nameInput) nameInput.blur();
+      else if (state === STATE.MENU) tellApp({ type: 'exit' });
+      else handle('back');
+    },
+  };
+
+  // --- Layout ---------------------------------------------------------------
+  function resize() {
+    const aw = document.body.clientWidth, ah = document.body.clientHeight;
+    scale = Math.min(aw / BASE_W, ah / BASE_H);
+    W = aw / scale; H = ah / scale;
+    // Keep a portrait playfield on wide desktop windows.
+    if (W > H * 0.75) W = H * 0.75;
+    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    canvas.style.width = `${W * scale}px`; canvas.style.height = `${H * scale}px`;
+    canvas.width = Math.round(W * scale * dpr); canvas.height = Math.round(H * scale * dpr);
+  }
+  new ResizeObserver(resize).observe(document.body);
+  resize();
+  for (let i = 0; i < DOT_COUNT; i++) dots.push({ x: Math.random() * W, y: Math.random() * H, r: rand(1, 3) });
+
+  // --- Update ---------------------------------------------------------------
+  function update(dt) {
+    time += dt;
+    fade = Math.max(fade - dt * 3, 0);
+    for (const d of dots) {
+      d.y -= (6 + d.r * 8) * dt;
+      if (d.y < -10) { d.x = Math.random() * W; d.y = H + 10; }
+    }
+    if (state === STATE.PAUSED) { updatePaused(dt); return; }
+    shake = Math.max(shake - dt * 30, 0);
+    flash = Math.max(flash - dt * 2.5, 0);
+    scorePop = Math.max(scorePop - dt * 4, 0);
+    comboPop = Math.max(comboPop - dt * 2, 0);
+    bannerTime = Math.max(bannerTime - dt, 0);
+    if (toast && (toast.time -= dt) <= 0) toast = null;
+    if (awardQueue.length && (awardQueue[0].time -= dt) <= 0) { awardQueue.shift(); if (awardQueue.length) sfx.play('figure'); }
+    modeFlash = modeFlash > 0 ? Math.max(modeFlash - dt * 5, 0) : Math.min(modeFlash + dt * 5, 0);
+    if (pageVel && !drag) {
+      // A flick keeps the About page going for a moment.
+      pageScroll = clamp(pageScroll + pageVel * dt, 0, pageMax);
+      pageVel *= Math.exp(-4 * dt);
+      if (Math.abs(pageVel) < 5 || pageScroll === 0 || pageScroll === pageMax) pageVel = 0;
+    }
+    arrowFlash = arrowFlash.map(v => Math.max(v - dt * 4, 0));
+    worldX = W / 2 + rand(-1, 1) * shake;
+    worldY = H / 2 + rand(-1, 1) * shake;
+
+    shape.update(dt);
+    const k = slowTime > 0 ? SLOW_FACTOR : 1;
+    for (const b of balls) {
+      b.trail.unshift([b.x, b.y]);
+      while (b.trail.length > trailLen()) b.trail.pop();
+      b.x += b.vx * dt * k; b.y += b.vy * dt * k;
+      if (b.switchAt && Math.hypot(b.x, b.y) < b.switchAt) {
+        b.switchAt = 0;
+        b.ci = b.switchTo;
+        b.color = PALETTE[b.ci];
+        burst(b.x, b.y, b.color, 8, 160); sfx.play('switch');
+      }
+    }
+    updateFx(dt);
+
+    if ([STATE.MENU, STATE.LEADERBOARD, STATE.ABOUT, STATE.SETTINGS].includes(state)) {
+      menuTurnTimer -= dt;
+      if (menuTurnTimer <= 0) { shape.rotateStep(); menuTurnTimer = 0.9; }
+    } else if (state === STATE.PLAYING) {
+      playTime += dt;
+      spawnTimer -= dt * k;
+      if (hint && (hint.time -= dt) <= 0) hint = null;
+      if (slowTime > 0 && (slowTime -= dt) <= 0) { slowTime = 0; music.setSlow(false); }
+      if (balls.length >= maxBalls()) spawnTimer = Math.max(spawnTimer, 0.4);
+      else if (spawnTimer <= 0) { spawnBall(); spawnTimer = spawnInterval(); }
+      checkHits();
+      if (mode === 'sprint' && state === STATE.PLAYING) {
+        // The clock runs slower in slow motion too; a tick for each of the last 5 seconds.
+        const before = Math.ceil(clock);
+        clock = Math.max(clock - dt * k, 0);
+        if (clock <= 0) gameOver();
+        else if (Math.ceil(clock) < before && clock < 5) sfx.play('click');
+      }
+    } else {
+      gameOverTime += dt;
+    }
+  }
+
+  // Everything in play is frozen; only the overlay and the resume countdown move.
+  function updatePaused(dt) {
+    pauseTime += dt;
+    if (resumeTimer <= 0) return;
+    const beat = Math.ceil(resumeTimer / RESUME_BEAT);
+    resumeTimer -= dt;
+    if (resumeTimer <= 0) { resumeTimer = 0; state = STATE.PLAYING; music.setDucked(false); }
+    else if (Math.ceil(resumeTimer / RESUME_BEAT) < beat) sfx.play('click');
+  }
+
+  // --- Drawing --------------------------------------------------------------
+  function circle(x, y, r, fill) {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fillStyle = fill; ctx.fill();
+  }
+
+  function drawBackground() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, rgba(BG_TOP)); g.addColorStop(1, rgba(BG_BOTTOM));
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    for (const d of dots) circle(d.x, d.y, d.r, `rgba(255,255,255,${0.04 + d.r * 0.03})`);
+    for (let i = 0; i < 6; i++) circle(worldX, worldY, 150 + i * 35, 'rgba(255,255,255,0.012)');
+    ctx.save();
+    ctx.setLineDash([10, 10]); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    for (const [dx, dy] of SPAWN_DIRS) {
+      const far = Math.abs(dx) * W / 2 + Math.abs(dy) * H / 2;
+      ctx.beginPath();
+      ctx.moveTo(worldX + dx * 195, worldY + dy * 195);
+      ctx.lineTo(worldX + dx * far, worldY + dy * far);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    const segs = 24;
+    for (let i = 0; i < segs; i++) {
+      const a = time * 0.25 + i * TAU / segs;
+      ctx.beginPath(); ctx.arc(worldX, worldY, 178, a, a + TAU / segs * 0.5); ctx.stroke();
+    }
+  }
+
+  // The rainbow ball cycles through the colors of the shape.
+  const jollyColor = b => shape.colors[Math.floor(time * 8 + b.ci) % shape.sides];
+
+  function drawBalls() {
+    for (const b of balls) {
+      const x = worldX + b.x, y = worldY + b.y;
+      const c = b.kind === 'jolly' ? jollyColor(b) : b.color;
+      const len = trailLen();
+      b.trail.forEach(([tx, ty], i) => trailPiece(look.trail, worldX + tx, worldY + ty, i, len, c));
+      circle(x, y, BALL_RADIUS * 2, rgba(c, 0.07));
+      circle(x, y, BALL_RADIUS * 1.45, rgba(c, 0.15));
+      if (!b.kind) {
+        circle(x, y, BALL_RADIUS, rgba(c));
+        if (symbolsOn) drawSymbol(SYMBOLS[b.ci], x, y, 11, rgba(INK, 0.85));
+        else circle(x - 5, y - 5, BALL_RADIUS * 0.35, 'rgba(255,255,255,0.45)');
+        continue;
+      }
+      drawSpecial(b, x, y, c);
+    }
+  }
+
+  function drawSpecial(b, x, y, c) {
+    // A pulsing white ring tells a special ball apart.
+    ctx.beginPath(); ctx.arc(x, y, BALL_RADIUS + 7 + 2 * Math.sin(time * 10), 0, TAU);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2; ctx.stroke();
+    if (b.kind === 'jolly') {
+      const n = shape.sides;
+      for (let i = 0; i < n; i++) {
+        const a = time * 5 + i * TAU / n;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, BALL_RADIUS, a, a + TAU / n); ctx.closePath();
+        ctx.fillStyle = rgba(shape.colors[i]); ctx.fill();
+      }
+      circle(x, y, 5, 'rgba(255,255,255,0.9)');
+      return;
+    }
+    circle(x, y, BALL_RADIUS, rgba(c));
+    if (symbolsOn) {
+      drawSymbol(SYMBOLS[b.ci], x, y, 11, rgba(INK, 0.85));
+      if (b.kind === 'chameleon' && !b.switchAt) return;
+      // Its own icon moves to a badge at the top right.
+      x += 15; y -= 15;
+      circle(x, y, 9, rgba(INK, 0.9));
+    }
+    const s = symbolsOn ? 4.5 : 7;
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.beginPath();
+    if (b.kind === 'heart') {
+      ctx.moveTo(x, y + s);
+      ctx.bezierCurveTo(x - s * 1.7, y - s * 0.1, x - s * 0.7, y - s * 1.4, x, y - s * 0.45);
+      ctx.bezierCurveTo(x + s * 0.7, y - s * 1.4, x + s * 1.7, y - s * 0.1, x, y + s);
+      ctx.fill();
+    } else if (b.kind === 'slow') {
+      ctx.moveTo(x - s, y - s); ctx.lineTo(x + s, y - s); ctx.lineTo(x - s, y + s); ctx.lineTo(x + s, y + s);
+      ctx.closePath(); ctx.fill();
+    } else if (b.kind === 'chameleon' && b.switchAt) {
+      // Dashes spinning around it until it changes color.
+      ctx.save();
+      ctx.setLineDash([5, 5]); ctx.lineDashOffset = -time * 40;
+      ctx.arc(x, y, symbolsOn ? 6 : BALL_RADIUS - 5, 0, TAU);
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = symbolsOn ? 2 : 3; ctx.stroke();
+      ctx.restore();
+    } else {
+      circle(x - 5, y - 5, BALL_RADIUS * 0.35, 'rgba(255,255,255,0.45)');
+    }
+  }
+
+  // Text with a soft drop shadow; align 'left' draws from x, 'center' centers on x.
+  function text(x, y, str, size, color, alpha = 1, align = 'left') {
+    ctx.font = `800 ${Math.round(size)}px ${FONT}`;
+    ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = `rgba(0,0,0,${0.35 * alpha})`; ctx.fillText(str, x, y + 4);
+    ctx.fillStyle = rgba(color, alpha); ctx.fillText(str, x, y);
+  }
+  const centered = (str, y, size, color, alpha = 1) => text(W / 2, y, str, size, color, alpha, 'center');
+
+  function roundRect(r, rad) {
+    ctx.beginPath();
+    if (ctx.roundRect) { ctx.roundRect(r.x, r.y, r.w, r.h, rad); return; }
+    ctx.moveTo(r.x + rad, r.y);
+    ctx.arcTo(r.x + r.w, r.y, r.x + r.w, r.y + r.h, rad);
+    ctx.arcTo(r.x + r.w, r.y + r.h, r.x, r.y + r.h, rad);
+    ctx.arcTo(r.x, r.y + r.h, r.x, r.y, rad);
+    ctx.arcTo(r.x, r.y, r.x + r.w, r.y, rad);
+    ctx.closePath();
+  }
+
+  function button(r, label, bg, bgAlpha, fg) {
+    ctx.save();
+    roundRect(r, r.h / 2);
+    if (bgAlpha >= 1) { ctx.shadowColor = rgba(bg, 0.35); ctx.shadowBlur = 28; }
+    ctx.fillStyle = rgba(bg, bgAlpha); ctx.fill();
+    ctx.restore();
+    if (bgAlpha < 1) { ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.35)'; roundRect(r, r.h / 2); ctx.stroke(); }
+    // Long labels (translations) shrink to fit.
+    let fs = Math.round(r.h * 0.4);
+    ctx.font = `800 ${fs}px ${FONT}`;
+    while (fs > 14 && ctx.measureText(label).width > r.w - 36) ctx.font = `800 ${--fs}px ${FONT}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = rgba(fg); ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + fs * 0.05);
+  }
+
+  // A button with a small second line under its label.
+  function button2(r, label, sub, bg, fg) {
+    roundRect(r, r.h / 2);
+    ctx.save(); ctx.shadowColor = rgba(bg, 0.35); ctx.shadowBlur = 28; ctx.fillStyle = rgba(bg); ctx.fill(); ctx.restore();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = rgba(fg);
+    const fit = (str, size, y, alpha) => {
+      let fs = size;
+      ctx.font = `800 ${fs}px ${FONT}`;
+      while (fs > 12 && ctx.measureText(str).width > r.w - 40) ctx.font = `800 ${--fs}px ${FONT}`;
+      ctx.globalAlpha = alpha; ctx.fillText(str, r.x + r.w / 2, y); ctx.globalAlpha = 1;
+    };
+    fit(label, Math.round(r.h * 0.34), r.y + r.h * 0.4, 1);
+    fit(sub, Math.round(r.h * 0.17), r.y + r.h * 0.74, 0.7);
+  }
+  // A left or right chevron in a soft circle.
+  function drawChevron(r, dir, flash) {
+    const cx = r.x + r.w / 2 + dir * 6 * flash, cy = r.y + r.h / 2;
+    circle(cx, cy, 34, `rgba(255,255,255,${0.08 + 0.15 * flash})`);
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(cx - dir * 6, cy - 13); ctx.lineTo(cx + dir * 7, cy); ctx.lineTo(cx - dir * 6, cy + 13); ctx.stroke();
+  }
+  // A medal on a ribbon; a dot on it while an award is new.
+  function drawMedalIcon(r) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2 + 4, col = 'rgba(255,255,255,0.75)';
+    ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx - 9, cy - 20); ctx.lineTo(cx - 3, cy - 8); ctx.moveTo(cx + 9, cy - 20); ctx.lineTo(cx + 3, cy - 8); ctx.stroke();
+    circle(cx, cy + 3, 12, col);
+    drawSymbol('star', cx, cy + 3, 8, rgba(BG_TOP));
+  }
+  // A small padlock.
+  function drawLock(x, y) {
+    ctx.strokeStyle = ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y - 4, 7, Math.PI, 0); ctx.stroke();
+    ctx.fillRect(x - 10, y - 4, 20, 15);
+  }
+
+  // The awards page: themes and trails to pick (the unlocked ones), then the awards.
+  let lookRects = [];
+  function pickLook(o) {
+    const reward = `${o.kind}:${o.id}`;
+    if (!isUnlocked(reward)) { sfx.play('click'); showToast(tr('locked', awardName(reward))); return; }
+    look[o.kind] = o.id;
+    saveJSON(LOOK_KEY, look);
+    if (o.kind === 'theme') applyTheme();
+    sfx.play('turn_right');
+  }
+  function drawAwards() {
+    ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
+    const bottom = pageBottom();
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, W, bottom); ctx.clip();
+    ctx.translate(0, -pageScroll);
+    lookRects = [];
+    const got = AWARDS.filter(([id]) => awardsRec.got[id]).length;
+    centered(tr('awards'), H * 0.1, 60, WHITE);
+    centered(tr('awards_count', got, AWARDS.length), H * 0.1 + 40, 20, WHITE, 0.5);
+    let y = H * 0.1 + 120;
+    const swatch = (cx, cy, kind, id, paint) => {
+      const open = isUnlocked(`${kind}:${id}`), on = look[kind] === id;
+      ctx.globalAlpha = open ? 1 : 0.35;
+      paint(cx, cy);
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(cx, cy, 42, 0, TAU);
+      ctx.strokeStyle = on ? rgba(PALETTE[2]) : 'rgba(255,255,255,0.2)'; ctx.lineWidth = on ? 5 : 2; ctx.stroke();
+      if (!open) drawLock(cx, cy);
+      text(cx, cy + 70, TEXT[lang][kind === 'theme' ? 'themes' : 'trails'][id], 16, on ? PALETTE[2] : WHITE, open ? 0.85 : 0.35, 'center');
+      lookRects.push({ r: { x: cx - 60, y: cy - 50, w: 120, h: 130 }, kind, id });
+    };
+    centered(tr('theme'), y, 26, PALETTE[2]);
+    y += 76;
+    THEMES.forEach((th, i) => swatch(W / 2 - 225 + (i % 4) * 150, y + Math.floor(i / 4) * 140, 'theme', th.id, (cx, cy) => {
+      const g = ctx.createLinearGradient(0, cy - 42, 0, cy + 42);
+      g.addColorStop(0, th.top); g.addColorStop(1, th.bottom);
+      ctx.beginPath(); ctx.arc(cx, cy, 42, 0, TAU); ctx.fillStyle = g; ctx.fill();
+      [0, 1, 2].forEach(k => circle(cx - 14 + k * 14, cy + 4, 5, rgba(PALETTE[k * 2])));
+    }));
+    y += 140 + 110;
+    centered(tr('trail'), y, 26, PALETTE[2]);
+    y += 76;
+    TRAILS.forEach((id, i) => swatch(W / 2 - 256 + i * 128, y, 'trail', id, (cx, cy) => {
+      circle(cx, cy, 42, 'rgba(255,255,255,0.06)');
+      const len = id === 'comet' ? 10 : 6;
+      for (let k = len - 1; k >= 0; k--) trailPiece(id, cx + 16 - (k + 1) * 5, cy, k, len, PALETTE[1], 8);
+      circle(cx + 16, cy, 8, rgba(PALETTE[1]));
+    }));
+    y += 140;
+    AWARDS.forEach(([id, reward], i) => {
+      const has = !!awardsRec.got[id], ry = y + i * 92, [title, desc] = TEXT[lang].award_list[id];
+      ctx.fillStyle = has ? rgba(PALETTE[2], 0.14) : 'rgba(255,255,255,0.05)';
+      roundRect({ x: 40, y: ry, w: W - 80, h: 80 }, 16); ctx.fill();
+      circle(86, ry + 40, 24, has ? rgba(PALETTE[2]) : 'rgba(255,255,255,0.12)');
+      drawSymbol('star', 86, ry + 40, 15, has ? rgba(INK) : 'rgba(255,255,255,0.3)');
+      text(126, ry + 35, title, 22, WHITE, has ? 1 : 0.6);
+      text(126, ry + 63, desc, 17, WHITE, has ? 0.65 : 0.4);
+      text(W - 60, ry + 49, rewardName(reward), 15, has ? PALETTE[2] : WHITE, has ? 0.9 : 0.35, 'right');
+    });
+    y += AWARDS.length * 92;
+    ctx.restore();
+    pageMax = Math.max(0, y + 20 - bottom);
+    pageScroll = Math.min(pageScroll, pageMax);
+    if (pageScroll < pageMax - 1) {
+      const g = ctx.createLinearGradient(0, bottom - 90, 0, bottom);
+      g.addColorStop(0, rgba(BG_BOTTOM, 0)); g.addColorStop(1, rgba(BG_BOTTOM, 0.95));
+      ctx.fillStyle = g; ctx.fillRect(0, bottom - 90, W, 90);
+    }
+    centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
+  }
+
+  // A cup on a stand.
+  function drawTrophyIcon(r) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2, col = 'rgba(255,255,255,0.75)';
+    ctx.fillStyle = ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx - 13, cy - 15); ctx.lineTo(cx + 13, cy - 15);
+    ctx.quadraticCurveTo(cx + 13, cy + 4, cx, cy + 5); ctx.quadraticCurveTo(cx - 13, cy + 4, cx - 13, cy - 15); ctx.fill();
+    for (const d of [-1, 1]) { ctx.beginPath(); ctx.arc(cx + d * 14, cy - 8, 6, d < 0 ? Math.PI * 0.5 : -Math.PI * 0.5, d < 0 ? Math.PI * 1.5 : Math.PI * 0.5); ctx.stroke(); }
+    ctx.fillRect(cx - 2, cy + 4, 4, 8); ctx.fillRect(cx - 10, cy + 12, 20, 4);
+  }
+
+  function drawMenu() {
+    const size = 104, word = 'COLOR';
+    ctx.font = `800 ${size}px ${FONT}`;
+    const widths = [...word].map(ch => ctx.measureText(ch).width);
+    let x = (W - widths.reduce((a, b) => a + b, 0)) / 2;
+    const y = H * 0.17;
+    for (let i = 0; i < word.length; i++) {
+      text(x, y + Math.sin(time * 3 + i * 0.7) * 6, word[i], size, PALETTE[i]);
+      x += widths[i];
+    }
+    centered('SPIN', y + 100, size, WHITE);
+
+    // How to play, only until the first game.
+    const cy = H / 2;
+    if (!best && !records.sprint && !records.hardcore && !dailyRec.lastDay) {
+      centered(tr('tagline_1'), cy - 245, 24, WHITE, 0.85);
+      centered(tr('tagline_2'), cy - 212, 22, WHITE, 0.5);
+    }
+
+    // Play, with the picked mode and its record on a second line.
+    const [r, lb, db, prev, next] = menuButtons(), p = 1 + Math.sin(time * 4) * 0.03;
+    const grown = { x: r.x - r.w * (p - 1) / 2, y: r.y - r.h * (p - 1) / 2, w: r.w * p, h: r.h * p };
+    const modeName = tr(`mode_${menuMode}`), record = menuMode === 'classic' ? best : records[menuMode] || 0;
+    button2(grown, tr('play'), record > 0 ? tr('mode_best', modeName, record) : modeName, PALETTE[2], INK);
+    drawChevron(prev, -1, modeFlash < 0 ? -modeFlash : 0);
+    drawChevron(next, 1, modeFlash > 0 ? modeFlash : 0);
+
+    // The daily challenge: today's rule, then the days in a row or today's best.
+    const day = today(), info = [twistText(twistFor(day))[0]];
+    if (dayStreak() >= 2) info.push(tr('daily_streak_short', dayStreak()));
+    else if (todayBest() > 0) info.push(tr('daily_today', todayBest()));
+    button2(db, tr('daily', dayNumber(day)), info.join('  ·  '), PALETTE[4], INK);
+
+    drawSettingsIcon(settingsButton());
+    drawTrophyIcon(lb);
+    drawInfoIcon(infoButton());
+    drawMedalIcon(menuButtons()[5]);
+  }
+
+  // Curved arrow; dir 1 = clockwise, -1 = counter-clockwise (mirrored).
+  function drawTurnArrow(cx, cy, dir, alpha) {
+    const r = 34, a0 = -Math.PI * 0.85, a1 = Math.PI * 0.35;
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(dir, 1);
+    ctx.strokeStyle = ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.lineWidth = 6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(0, 0, r, a0, a1); ctx.stroke();
+    const tip = [Math.cos(a1) * r, Math.sin(a1) * r], tg = [-Math.sin(a1), Math.cos(a1)], sd = [-tg[1], tg[0]];
+    ctx.beginPath();
+    ctx.moveTo(tip[0] + tg[0] * 14, tip[1] + tg[1] * 14);
+    ctx.lineTo(tip[0] - tg[0] * 4 + sd[0] * 12, tip[1] - tg[1] * 4 + sd[1] * 12);
+    ctx.lineTo(tip[0] - tg[0] * 4 - sd[0] * 12, tip[1] - tg[1] * 4 - sd[1] * 12);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawPauseIcon(r) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    circle(cx, cy, 30, 'rgba(255,255,255,0.08)');
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (const x of [-7, 7]) { ctx.moveTo(cx + x, cy - 11); ctx.lineTo(cx + x, cy + 11); }
+    ctx.stroke();
+  }
+
+  function drawInfoIcon(r) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2, col = 'rgba(255,255,255,0.75)';
+    ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(cx, cy, 17, 0, TAU); ctx.stroke();
+    circle(cx, cy - 8, 2.8, col);
+    ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(cx, cy - 2); ctx.lineTo(cx, cy + 9); ctx.stroke();
+  }
+
+  // A cog: eight teeth around a ring.
+  function drawSettingsIcon(r) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2, col = 'rgba(255,255,255,0.75)';
+    ctx.strokeStyle = col; ctx.lineWidth = 7; ctx.lineCap = 'butt';
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = i * TAU / 8;
+      ctx.moveTo(cx + Math.cos(a) * 10, cy + Math.sin(a) * 10); ctx.lineTo(cx + Math.cos(a) * 19, cy + Math.sin(a) * 19);
+    }
+    ctx.stroke();
+    circle(cx, cy, 14, col);
+    circle(cx, cy, 6, rgba(BG_TOP));
+  }
+
+  // Two beamed eighth notes, crossed out when the music is off.
+  function drawMusicIcon(r) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2, col = 'rgba(255,255,255,0.75)';
+    ctx.strokeStyle = col; ctx.lineCap = 'round';
+    for (const x of [-9, 9]) {
+      circle(cx + x - 4, cy + 10, 5.5, col);
+      ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx + x + 1, cy + 10); ctx.lineTo(cx + x + 1, cy - 12); ctx.stroke();
+    }
+    ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx - 8, cy - 12); ctx.lineTo(cx + 10, cy - 15); ctx.stroke();
+    if (music.muted) {
+      ctx.beginPath(); ctx.moveTo(cx - 20, cy - 18); ctx.lineTo(cx + 20, cy + 18);
+      ctx.strokeStyle = rgba(BG_BOTTOM, 0.9); ctx.lineWidth = 7; ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
+    }
+  }
+
+  function drawSoundIcon(r) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2, col = 'rgba(255,255,255,0.75)';
+    ctx.fillStyle = ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath();
+    [[-16, -6], [-8, -6], [2, -15], [2, 15], [-8, 6], [-16, 6]].forEach(([x, y], i) =>
+      i ? ctx.lineTo(cx + x, cy + y) : ctx.moveTo(cx + x, cy + y));
+    ctx.closePath(); ctx.fill();
+    if (sfx.muted) {
+      ctx.beginPath(); ctx.moveTo(cx + 8, cy - 7); ctx.lineTo(cx + 20, cy + 7);
+      ctx.moveTo(cx + 8, cy + 7); ctx.lineTo(cx + 20, cy - 7); ctx.stroke();
+    } else {
+      for (const rad of [9, 16]) { ctx.beginPath(); ctx.arc(cx + 2, cy, rad, -Math.PI / 3, Math.PI / 3); ctx.stroke(); }
+    }
+  }
+
+  function drawLeaderboard() {
+    ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
+    centered(tr('leaderboard'), H * 0.1, 60, WHITE);
+    boardTabs().forEach((r, i) => {
+      const on = BOARD_TABS[i] === boardTab, c = BOARD_TABS[i] === 'today' ? PALETTE[4] : PALETTE[2];
+      button(r, tr(['tab_classic', 'tab_sprint', 'tab_hardcore', 'tab_today'][i]), on ? c : WHITE, on ? 1 : 0.1, on ? INK : WHITE);
+    });
+    const day = today();
+    if (boardTab === 'today') {
+      drawRemoteBoard(daily, `${tr('daily', dayNumber(day))}  ·  ${twistText(twistFor(day))[0]}`, tr('no_daily'));
+      return;
+    }
+    if (modeBoards[boardTab]) { drawRemoteBoard(modeBoards[boardTab], tr(`top_${boardTab}`), tr(`no_${boardTab}`)); return; }
+    const local = board.status === 'local', global = board.status === 'global';
+    centered(tr(local ? 'top_local' : global ? 'top_world' : 'top_online'),
+      H * 0.1 + 124, 20, WHITE, 0.5);
+    if (board.status === 'loading') centered(tr('loading'), H * 0.4, 24, WHITE, 0.6);
+    else if (!board.rows.length) centered(tr('no_scores'), H * 0.4, 24, WHITE, 0.6);
+    const y0 = H * 0.21, w = W - 80;
+    const row = (y, rank, r, mine) => boardRow(y, rank, r, mine, local, global);
+    board.rows.forEach((r, i) => row(y0 + i * 66, i + 1, r,
+      local ? i === board.localHighlight : global ? r.mine : r.id === board.myId));
+    // Outside the global top 10: the player's own place, under the list.
+    if (global && board.me && board.me.rank > board.rows.length) {
+      const y = y0 + board.rows.length * 66 + 10;
+      centered('···', y + 4, 24, WHITE, 0.4);
+      row(y + 20, board.me.rank, board.me, true);
+    }
+    if (board.status === 'ready' && !board.myId) centered(tr('sign_in'), H * 0.84, 20, WHITE, 0.5);
+    centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
+  }
+
+  // The daily and 60-second boards: a subtitle, then the same rows.
+  function drawRemoteBoard(rb, subtitle, empty) {
+    centered(subtitle, H * 0.1 + 124, 20, rb === daily ? PALETTE[4] : WHITE, rb === daily ? 0.9 : 0.5);
+    const y0 = H * 0.21;
+    if (rb.status === 'offline' && !rb.rows.length) centered(tr('offline'), H * 0.4, 24, WHITE, 0.6);
+    else if (rb.status !== 'ok') centered(tr('loading'), H * 0.4, 24, WHITE, 0.6);
+    else if (!rb.rows.length) centered(empty, H * 0.4, 24, WHITE, 0.6);
+    const global = rb.source === 'server';
+    rb.rows.forEach((r, i) => boardRow(y0 + i * 66, i + 1, r, r.mine, false, global));
+    if (global && rb.me && rb.me.rank > rb.rows.length) {
+      const y = y0 + rb.rows.length * 66 + 10;
+      centered('···', y + 4, 24, WHITE, 0.4);
+      boardRow(y + 20, rb.me.rank, rb.me, true, false, true);
+    }
+    centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
+  }
+
+  function boardRow(y, rank, r, mine, local, global) {
+    const w = W - 80;
+    ctx.fillStyle = mine ? rgba(PALETTE[2], 0.16) : 'rgba(255,255,255,0.05)';
+    roundRect({ x: 40, y, w, h: 56 }, 14); ctx.fill();
+    circle(76, y + 28, 18, rgba(PALETTE[(rank - 1) % PALETTE.length]));
+    ctx.font = `800 ${rank < 100 ? 22 : rank < 1000 ? 16 : 12}px ${FONT}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = rgba(INK); ctx.fillText(String(rank), 76, y + 29);
+    // Local games saved before names existed, or left unnamed, show their date.
+    let name = local ? r.name || r.date : (global ? r.name : board.names[r.id]) || tr('player');
+    if (mine && !local) name += tr('you');
+    ctx.font = `800 24px ${FONT}`;
+    while (name.length > 3 && ctx.measureText(name).width > w - 250) name = name.slice(0, -2) + '…';
+    text(112, y + 37, name, 24, WHITE);
+    text(40 + w - 120, y + 36, tr('row_level', r.level), 18, WHITE, 0.45, 'right');
+    text(40 + w - 22, y + 39, String(r.score), 30, WHITE, 1, 'right');
+  }
+
+  function drawAbout() {
+    ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
+    // The text scrolls above the fixed "tap to go back" line.
+    const bottom = pageBottom();
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, W, bottom); ctx.clip();
+    ctx.translate(0, -pageScroll);
+    centered('COLOR SPIN', H * 0.1, 60, WHITE);
+    centered(tr('version', VERSION), H * 0.1 + 40, 20, WHITE, 0.5);
+    let y = H * 0.18;
+    for (const [title, lines] of TEXT[lang].about) {
+      centered(title, y, 26, PALETTE[2]);
+      y += 40;
+      for (const line of lines) { centered(line, y, 22, WHITE, 0.8); y += 31; }
+      y += 22;
+    }
+    // The site link, right under the credits: underlined, and tappable.
+    y -= 22;
+    ctx.font = `800 24px ${FONT}`;
+    const w = ctx.measureText(SITE_LABEL).width;
+    centered(SITE_LABEL, y, 24, PALETTE[1]);
+    ctx.fillStyle = rgba(PALETTE[1]); ctx.fillRect((W - w) / 2, y + 5, w, 2);
+    ctx.restore();
+    pageMax = Math.max(0, y + 60 - bottom);
+    pageScroll = Math.min(pageScroll, pageMax);
+    // Tappable only while on screen.
+    const ly = y - pageScroll;
+    linkRect = ly < bottom ? { x: (W - w) / 2 - 20, y: ly - 34, w: w + 40, h: Math.min(56, bottom - ly + 34) } : { x: 0, y: 0, w: 0, h: 0 };
+    // More text below: fade the bottom edge.
+    if (pageScroll < pageMax - 1) {
+      const g = ctx.createLinearGradient(0, bottom - 90, 0, bottom);
+      g.addColorStop(0, rgba(BG_BOTTOM, 0)); g.addColorStop(1, rgba(BG_BOTTOM, 0.95));
+      ctx.fillStyle = g; ctx.fillRect(0, bottom - 90, W, 90);
+    }
+    centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
+  }
+
+  function drawSettings() {
+    ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
+    centered(tr('settings'), H * 0.2, 60, WHITE);
+    const rows = settingsButtons();
+    const values = [
+      [tr('music'), music.muted ? tr('off') : tr('on')],
+      [tr('sounds'), sfx.muted ? tr('off') : tr('on')],
+      [tr('language'), tr('lang_name')],
+      [tr('symbols'), symbolsOn ? tr('on') : tr('off')],
+    ];
+    values.forEach(([k, v], i) => button(rows[i], `${k}:  ${v}`, WHITE, 0.1, WHITE));
+    // A preview of the symbols next to their row.
+    if (symbolsOn) SYMBOLS.forEach((k, i) => {
+      const x = W / 2 - 3.5 * 40 + i * 40, y = rows[3].y + rows[3].h + 26;
+      circle(x, y, 15, rgba(PALETTE[i])); drawSymbol(k, x, y, 10, rgba(INK, 0.85));
+    });
+    button(rows[4], tr('back'), PALETTE[2], 1, INK);
+  }
+
+  function drawPlay() {
+    ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(0, 0, W, 6);
+    ctx.fillStyle = rgba(PALETTE[2]);
+    ctx.fillRect(0, 0, W * (hits % POINTS_PER_LEVEL) / POINTS_PER_LEVEL, 6);
+
+    text(28, 84, String(score), 56 + 18 * scorePop, WHITE);
+    const scoreW = ctx.measureText(String(score)).width;
+    const mult = multiplier();
+    if (mult > 1) text(28 + scoreW + 14, 84, `x${mult}`, 36 + 16 * comboPop, PALETTE[2]);
+    text(30, 118, tr('hud_level', level), 20, WHITE, 0.55);
+    if (streak >= 3) text(30, 146, tr('hud_combo', streak), 18, PALETTE[2], 0.7);
+    if (mode === 'daily') text(W - 24, 104, tr('daily', dayNumber(gameDay)), 18, PALETTE[4], 0.85, 'right');
+    if (mode === 'zen') text(W - 28, 72, tr('mode_zen'), 26, PALETTE[6], 0.6, 'right');
+    if (mode === 'sprint') {
+      // Time left, red in the last 10 seconds, with a bar under it.
+      const secs = Math.ceil(clock), low = clock < 10;
+      const pop = low && state === STATE.PLAYING ? 1 + 0.08 * Math.max(0, Math.cos((clock % 1) * TAU)) : 1;
+      text(W - 28, 84, `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`, 52 * pop, low ? PALETTE[0] : WHITE, 1, 'right');
+      ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(W - 188, 100, 160, 6);
+      ctx.fillStyle = rgba(low ? PALETTE[0] : PALETTE[6]); ctx.fillRect(W - 188, 100, 160 * clamp(clock / SPRINT_TIME, 0, 1), 6);
+    }
+    if (slowTime > 0) {
+      // Time left in slow motion, as an arc around the shape.
+      ctx.beginPath();
+      ctx.arc(worldX, worldY, 200, -Math.PI / 2, -Math.PI / 2 + TAU * slowTime / SLOW_TIME);
+      ctx.strokeStyle = rgba(PALETTE[6], 0.8); ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke();
+    }
+    for (let i = 0; hasLives() && i < maxLives; i++) {
+      const x = W - 36 - i * 34, y = 56;
+      if (i < lives) {
+        circle(x, y, 17, rgba(PALETTE[0], 0.2));
+        circle(x, y, 11, rgba(PALETTE[0]));
+        circle(x - 3, y - 3, 3.5, 'rgba(255,255,255,0.5)');
+      } else {
+        ctx.beginPath(); ctx.arc(x, y, 10, 0, TAU);
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 2; ctx.stroke();
+      }
+    }
+    if (state === STATE.PLAYING) {
+      drawPauseIcon(pauseButton());
+      drawTurnArrow(96, H - 110, -1, 0.12 + 0.6 * arrowFlash[0]);
+      drawTurnArrow(W - 96, H - 110, 1, 0.12 + 0.6 * arrowFlash[1]);
+    }
+    if (bannerTime > 0 && state === STATE.PLAYING) {
+      const a = clamp(bannerTime / 0.4, 0, 1), grow = clamp((1.2 - bannerTime) / 0.15, 0, 1);
+      centered(banner, H * 0.22, lerp(36, 52, grow), WHITE, a);
+    }
+    if (hint && state === STATE.PLAYING) {
+      const a = clamp(hint.time / 0.4, 0, 1) * clamp((3.5 - hint.time) / 0.2, 0, 1);
+      centered(hint.title, H * 0.3, 34, PALETTE[2], a);
+      centered(hint.line, H * 0.3 + 38, 22, WHITE, 0.85 * a);
+    }
+  }
+
+  function drawPause() {
+    if (resumeTimer > 0) {
+      // Countdown over the frozen board, so the player can see what's coming.
+      const n = Math.ceil(resumeTimer / RESUME_BEAT), k = (resumeTimer % RESUME_BEAT) / RESUME_BEAT;
+      ctx.fillStyle = rgba(BG_BOTTOM, 0.35); ctx.fillRect(0, 0, W, H);
+      centered(String(n), H * 0.22 + 20, lerp(90, 130, k), WHITE, clamp(k * 2, 0, 1));
+      return;
+    }
+    const t = clamp(pauseTime * 5, 0, 1);
+    ctx.fillStyle = rgba(BG_BOTTOM, 0.8 * t); ctx.fillRect(0, 0, W, H);
+    const slide = (1 - t) * 30;
+    centered(tr('paused'), H * 0.3 + slide, 68, WHITE, t);
+    centered(tr('pause_stats', score, level), H * 0.3 + 48 + slide, 22, WHITE, 0.55 * t);
+    const b = pauseButtons();
+    button(b[0], tr('resume'), PALETTE[2], 1, INK);
+    button(b[1], tr('menu'), WHITE, 0.1, WHITE);
+    const audio = pauseAudioButtons();
+    drawMusicIcon(audio[0]);
+    drawSoundIcon(audio[1]);
+  }
+
+  function drawGameOver() {
+    const t = clamp(gameOverTime * 3, 0, 1);
+    ctx.fillStyle = rgba(BG_BOTTOM, 0.8 * t); ctx.fillRect(0, 0, W, H);
+    const slide = (1 - t) * 40;
+    if (mode === 'daily') centered(`${tr('daily', dayNumber(gameDay))}  ·  ${twistText(twist)[0]}`, H * 0.27 - 76 + slide, 24, PALETTE[4], t);
+    if (mode === 'sprint') centered(tr('mode_sprint'), H * 0.27 - 76 + slide, 24, PALETTE[6], t);
+    if (mode === 'hardcore') centered(tr('mode_hardcore'), H * 0.27 - 76 + slide, 24, PALETTE[0], t);
+    centered(tr(mode === 'sprint' ? 'time_up' : 'game_over'), H * 0.27 + slide, 68, PALETTE[0], t);
+    centered(String(score), H * 0.41 + slide, 130, WHITE, t);
+    centered(tr('points_level', level, bestStreak), H * 0.41 + 44 + slide, 22, WHITE, 0.55 * t);
+    const daySide = mode === 'daily';
+    if (newBest) centered(tr(daySide ? 'daily_new_best' : 'new_best'), H * 0.52 + slide, 34 + Math.sin(time * 6) * 3, PALETTE[2], t);
+    else centered(daySide ? tr('daily_best', todayBest()) : tr('best', records[mode] ?? best), H * 0.52 + slide, 26, WHITE, 0.6 * t);
+    const rb = modeBoard();
+    if (rb) { if (rb.me) centered(rankText(rb), H * 0.52 + 44 + slide, 22, WHITE, 0.7 * t); }
+    else if (lastRank > 0) centered(tr('rank', lastRank), H * 0.52 + 44 + slide, 22, WHITE, 0.7 * t);
+    else if (score > 0 && board.status === 'ready' && !board.myId)
+      centered(tr('sign_in'), H * 0.52 + 44 + slide, 20, WHITE, 0.5 * t);
+    if (nameShown) placeNameInput(t);
+    if (gameOverTime > 0.6) {
+      const b = gameOverButtons();
+      button(b[0], tr('replay'), PALETTE[2], 1, INK);
+      button(b[1], tr('share'), PALETTE[4], 1, INK);
+      button(b[2], tr('menu'), WHITE, 0.1, WHITE);
+    }
+  }
+
+  function draw() {
+    ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+    drawBackground();
+    drawBalls();
+    shape.draw(worldX, worldY);
+    drawFx(worldX, worldY);
+    if (state === STATE.MENU) drawMenu();
+    else if (state === STATE.LEADERBOARD) drawLeaderboard();
+    else if (state === STATE.ABOUT) drawAbout();
+    else if (state === STATE.SETTINGS) drawSettings();
+    else if (state === STATE.AWARDS) drawAwards();
+    else {
+      drawPlay();
+      if (state === STATE.PAUSED) drawPause();
+      else if (state === STATE.GAME_OVER) drawGameOver();
+    }
+    if (toast) centered(toast.text, H * 0.95, 22, WHITE, clamp(toast.time / 0.4, 0, 1));
+    if (awardQueue.length && (state === STATE.PLAYING || state === STATE.GAME_OVER)) {
+      // A new award: a yellow pill sliding in under the top bar.
+      const a = awardQueue[0], k = clamp(Math.min(a.time, AWARD_TIME - a.time) / 0.25, 0, 1);
+      ctx.font = `800 24px ${FONT}`;
+      const w = ctx.measureText(a.text).width + 90, r = { x: (W - w) / 2, y: 118 - 30 * (1 - k), w, h: 56 };
+      ctx.globalAlpha = k;
+      roundRect(r, 28); ctx.fillStyle = rgba(PALETTE[2]); ctx.fill();
+      drawSymbol('star', r.x + 34, r.y + 28, 13, rgba(INK));
+      ctx.fillStyle = rgba(INK); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(a.text, r.x + w / 2 + 18, r.y + 29);
+      ctx.globalAlpha = 1;
+    }
+    if (flash > 0) { ctx.fillStyle = `rgba(255,51,51,${0.22 * flash})`; ctx.fillRect(0, 0, W, H); }
+    if (fade > 0) { ctx.fillStyle = rgba(BG_BOTTOM, fade); ctx.fillRect(0, 0, W, H); }
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    // Clamp the step so a hidden tab or a hiccup doesn't teleport the balls.
+    const dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  applyLanguage();
+  goToMenu();
+  requestAnimationFrame(frame);
+  initBoard();
+})();
+</script>
+
+</body>
+</html>
