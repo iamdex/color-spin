@@ -1,10 +1,13 @@
 // The app is the web game (web/index.html, bundled into game-html.js) in a
 // full-screen WebView. The native side only keeps the screen awake, opens
-// links in the phone's browser and forwards the back button and background
-// events to the page (window.colorSpinApp in web/index.html).
+// links in the phone's browser, shares the page's score picture and forwards
+// the back button and background events to the page (window.colorSpinApp in
+// web/index.html).
 import { useEffect, useRef } from 'react';
 import { AppState, BackHandler, Linking, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useKeepAwake } from 'expo-keep-awake';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -13,6 +16,16 @@ import gameHtml from './game-html';
 // A fixed https origin, so localStorage (best score, settings, leaderboard) persists.
 const BASE_URL = 'https://color-spin.local/';
 const BG = '#08080f';
+
+// The page sends the picture as a PNG data URL: save it and open the share sheet.
+async function shareImage(dataUrl) {
+  const base64 = typeof dataUrl === 'string' && dataUrl.startsWith('data:image/png;base64,') && dataUrl.split(',')[1];
+  if (!base64 || !(await Sharing.isAvailableAsync())) return;
+  const file = new File(Paths.cache, 'color-spin.png');
+  file.create({ overwrite: true });
+  file.write(base64, { encoding: 'base64' });
+  await Sharing.shareAsync(file.uri, { mimeType: 'image/png', UTI: 'public.png', dialogTitle: 'Color Spin' });
+}
 
 export default function App() {
   useKeepAwake();
@@ -30,6 +43,7 @@ export default function App() {
     try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
     if (msg.type === 'open' && /^https:\/\//.test(msg.url)) Linking.openURL(msg.url);
     else if (msg.type === 'exit') BackHandler.exitApp();
+    else if (msg.type === 'share') shareImage(msg.image).catch(() => {});
   }
 
   return (

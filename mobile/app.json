@@ -47,7 +47,8 @@
           "imageWidth": 160,
           "backgroundColor": "#08080f"
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }

@@ -8,3 +8,16 @@ CREATE TABLE IF NOT EXISTS players (
   touched_at INTEGER NOT NULL    -- last write (ms), for the rate limit
 );
 CREATE INDEX IF NOT EXISTS players_rank ON players (score DESC, scored_at ASC);
+
+-- The daily challenge: one row per day and player, their best game of that day.
+CREATE TABLE IF NOT EXISTS daily (
+  day TEXT NOT NULL,             -- YYYY-MM-DD, Italian time (the game decides it)
+  player TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  score INTEGER NOT NULL,
+  level INTEGER NOT NULL,
+  scored_at INTEGER NOT NULL,
+  touched_at INTEGER NOT NULL,
+  PRIMARY KEY (day, player)
+);
+CREATE INDEX IF NOT EXISTS daily_rank ON daily (day, score DESC, scored_at ASC);
