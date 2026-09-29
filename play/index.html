@@ -53,9 +53,10 @@
   const SHAPE_RADIUS = 120, TURN_TIME = 0.12;
   const BALL_RADIUS = 16, TRAIL_LEN = 12;
   const FONT = 'Montserrat, "Arial Black", Arial, sans-serif';
-  const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6, AWARDS: 7 };
+  const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6, AWARDS: 7, SPLASH: 8 };
+  const SPLASH_TIME = 3.3; // the opening: the logo builds itself, the title, the author
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
-  const VERSION = '1.6.1';
+  const VERSION = '1.7';
   // Hits in a row for x2, x3 and x4. A miss starts the count again.
   const COMBO_STEPS = [10, 25, 50];
   const JOLLY_POINTS = 3, SLOW_TIME = 5, SLOW_FACTOR = 0.5;
@@ -118,6 +119,7 @@
       "lang_name": "ITALIANO",
       "tagline_1": "Tocca a sinistra o a destra per ruotare",
       "tagline_2": "e abbina il colore delle palline",
+      "splash_by": "UN GIOCO DI",
       "play": "GIOCA",
       "leaderboard": "CLASSIFICA",
       "best": "RECORD  %d",
@@ -295,6 +297,7 @@
       "lang_name": "ENGLISH",
       "tagline_1": "Tap left or right to spin",
       "tagline_2": "and match the color of the balls",
+      "splash_by": "A GAME BY",
       "play": "PLAY",
       "leaderboard": "LEADERBOARD",
       "best": "BEST  %d",
@@ -1447,6 +1450,11 @@
     try { localStorage.setItem(SAVE_KEY, String(best)); } catch {}
   }
 
+  let splashTime = 0, splashBurst = false;
+  function startSplash() {
+    state = STATE.SPLASH; splashTime = 0; splashBurst = false; fade = 0;
+  }
+
   function goToMenu() {
     hideNameInput();
     balls = []; clearFx();
@@ -1726,6 +1734,7 @@
 
   function handle(action, pos) {
     sfx.unlock();
+    if (state === STATE.SPLASH) { if (splashTime > 0.3) goToMenu(); return; }
     if (action === 'music') { toggleMusic(); return; }
     if (action === 'effects') { toggleSound(); return; }
     if (action === 'language') { toggleLanguage(); return; }
@@ -1958,7 +1967,16 @@
     }
     updateFx(dt);
 
-    if ([STATE.MENU, STATE.LEADERBOARD, STATE.ABOUT, STATE.SETTINGS].includes(state)) {
+    if (state === STATE.SPLASH) {
+      splashTime += dt;
+      if (!splashBurst && splashTime >= SPLASH_SNAP) {
+        // The last piece snaps in: a ring and a burst of every color.
+        splashBurst = true;
+        ring(0, SPLASH_Y, WHITE, 70, 460, 0.7);
+        for (const c of PALETTE) burst(0, SPLASH_Y, c, 6, 460);
+      }
+      if (splashTime >= SPLASH_TIME) goToMenu();
+    } else if ([STATE.MENU, STATE.LEADERBOARD, STATE.ABOUT, STATE.SETTINGS].includes(state)) {
       menuTurnTimer -= dt;
       if (menuTurnTimer <= 0) { shape.rotateStep(); menuTurnTimer = 0.9; }
     } else if (state === STATE.PLAYING) {
@@ -2001,6 +2019,7 @@
     g.addColorStop(0, rgba(BG_TOP)); g.addColorStop(1, rgba(BG_BOTTOM));
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     for (const d of dots) circle(d.x, d.y, d.r, `rgba(255,255,255,${0.04 + d.r * 0.03})`);
+    if (state === STATE.SPLASH) return; // the opening has only the stars
     for (let i = 0; i < 6; i++) circle(worldX, worldY, 150 + i * 35, 'rgba(255,255,255,0.012)');
     ctx.save();
     ctx.setLineDash([10, 10]); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.06)';
@@ -2122,6 +2141,85 @@
   }
 
   // A button with a small second line under its label.
+  // --- The opening -----------------------------------------------------------
+  // The eight pieces of the octagon fly in spinning and lock together; then the
+  // title drops in letter by letter, and the author's name signs it off.
+  const SPLASH_Y = -130, SPLASH_R = 150, SPLASH_SNAP = 0.95; // center offset, radius, when it closes
+  const easeOut = t => 1 - (1 - t) ** 3;
+  function splashPiece(cx, cy, a0, a1, r, c, alpha) {
+    const p0 = [cx + Math.cos(a0) * r, cy + Math.sin(a0) * r], p1 = [cx + Math.cos(a1) * r, cy + Math.sin(a1) * r];
+    ctx.globalAlpha = alpha;
+    const g = ctx.createLinearGradient(cx, cy, (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2);
+    g.addColorStop(0, rgba(darkened(c, 0.5))); g.addColorStop(1, rgba(c));
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.closePath();
+    ctx.fillStyle = g; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]);
+    ctx.strokeStyle = rgba(lightened(c, 0.35)); ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  function drawSplash() {
+    const t = splashTime, cx = worldX, cy = worldY + SPLASH_Y, n = 8, st = TAU / n;
+    // The logo: one spin that slows down while the pieces arrive.
+    const rot = -TAU * 0.6 * (1 - easeOut(clamp(t / 1.2, 0, 1))) - Math.PI / 2 - st / 2;
+    const closed = clamp((t - SPLASH_SNAP) / 0.4, 0, 1);
+    if (closed > 0) {
+      for (const [k, a] of [[1.25, 0.06], [1.12, 0.1]]) {
+        for (let i = 0; i < n; i++) {
+          ctx.beginPath(); ctx.moveTo(cx, cy);
+          ctx.arc(cx, cy, SPLASH_R * k, rot + i * st, rot + (i + 1) * st); ctx.closePath();
+          ctx.fillStyle = rgba(PALETTE[i], a * closed); ctx.fill();
+        }
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      const d = clamp((t - i * 0.05) / 0.6, 0, 1), e = backOut(d), mid = rot + (i + 0.5) * st;
+      const off = (1 - e) * 460, px = cx + Math.cos(mid + 1.2) * off, py = cy + Math.sin(mid + 1.2) * off;
+      splashPiece(px, py, rot + i * st, rot + (i + 1) * st, SPLASH_R * (0.4 + 0.6 * e), PALETTE[i], clamp(d * 3, 0, 1));
+    }
+    if (closed > 0) {
+      ctx.globalAlpha = closed;
+      ctx.strokeStyle = 'rgba(13,13,23,0.55)'; ctx.lineWidth = 3;
+      for (let i = 0; i < n; i++) {
+        const a = rot + i * st;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * SPLASH_R, cy + Math.sin(a) * SPLASH_R); ctx.stroke();
+      }
+      circle(cx, cy, 22, 'rgb(18,18,26)');
+      ctx.beginPath(); ctx.arc(cx, cy, 22, 0, TAU); ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // COLOR, one letter at a time in its color, then SPIN.
+    const size = 100, word = 'COLOR', ty = cy + SPLASH_R + 150;
+    ctx.font = `800 ${size}px ${FONT}`;
+    const widths = [...word].map(ch => ctx.measureText(ch).width);
+    let x = (W - widths.reduce((a, b) => a + b, 0)) / 2;
+    for (let i = 0; i < word.length; i++) {
+      const d = clamp((t - 1.0 - i * 0.08) / 0.35, 0, 1);
+      if (d > 0) text(x, ty - (1 - backOut(d)) * 70, word[i], size, PALETTE[i], clamp(d * 2, 0, 1));
+      x += widths[i];
+    }
+    const sp = clamp((t - 1.45) / 0.35, 0, 1);
+    if (sp > 0) centered('SPIN', ty + 96 + (1 - easeOut(sp)) * 24, size, WHITE, sp);
+
+    // The signature: who made it, underlined by the game's colors.
+    const by = clamp((t - 1.8) / 0.4, 0, 1), name = clamp((t - 1.95) / 0.45, 0, 1), line = easeOut(clamp((t - 2.1) / 0.5, 0, 1));
+    const sy = H - 170;
+    if (by > 0) centered(tr('splash_by'), sy - 48, 22, WHITE, 0.55 * by);
+    if (name > 0) {
+      if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.round(8 * (1 - easeOut(name)) + 2)}px`;
+      centered('DAVIDE DEX ESPERTINI', sy + (1 - easeOut(name)) * 14, 36, WHITE, name);
+      if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    }
+    if (line > 0) {
+      const w = 440 * line, g = ctx.createLinearGradient(W / 2 - w / 2, 0, W / 2 + w / 2, 0);
+      [0, 2, 3, 1, 4].forEach((c, k) => g.addColorStop(k / 4, rgba(PALETTE[c])));
+      ctx.fillStyle = g; roundRect({ x: W / 2 - w / 2, y: sy + 22, w, h: 5 }, 2.5); ctx.fill();
+    }
+    // Into the menu.
+    const out = clamp((t - (SPLASH_TIME - 0.4)) / 0.4, 0, 1);
+    if (out > 0) { ctx.fillStyle = rgba(BG_BOTTOM, out); ctx.fillRect(0, 0, W, H); }
+  }
+
   // A mode's icon, `size` wide, centered on x, y.
   function drawModeIcon(m, x, y, size, color) {
     ctx.save();
@@ -2614,13 +2712,15 @@
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
     drawBackground();
     drawBalls();
-    shape.draw(worldX, worldY);
+    if (state === STATE.SPLASH) drawSplash();
+    else shape.draw(worldX, worldY);
     drawFx(worldX, worldY);
     if (state === STATE.MENU) drawMenu();
     else if (state === STATE.LEADERBOARD) drawLeaderboard();
     else if (state === STATE.ABOUT) drawAbout();
     else if (state === STATE.SETTINGS) drawSettings();
     else if (state === STATE.AWARDS) drawAwards();
+    else if (state === STATE.SPLASH) { /* drawn with the shape, above */ }
     else {
       drawPlay();
       if (state === STATE.PAUSED) drawPause();
@@ -2654,7 +2754,7 @@
   }
 
   applyLanguage();
-  goToMenu();
+  startSplash();
   requestAnimationFrame(frame);
   initBoard();
 })();
