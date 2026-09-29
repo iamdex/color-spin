@@ -32,3 +32,14 @@ CREATE TABLE IF NOT EXISTS sprint (
   touched_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sprint_rank ON sprint (score DESC, scored_at ASC);
+
+-- The hardcore mode: one row per player, like players.
+CREATE TABLE IF NOT EXISTS hardcore (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL DEFAULT '',
+  score INTEGER NOT NULL,
+  level INTEGER NOT NULL,
+  scored_at INTEGER NOT NULL,
+  touched_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS hardcore_rank ON hardcore (score DESC, scored_at ASC);

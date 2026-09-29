@@ -36,7 +36,9 @@
 
   const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
   const PALETTE = ['#ff4d6d', '#4dabf7', '#ffd43b', '#51cf66', '#b197fc', '#ff922b', '#3bc9db', '#f783ac'].map(hex);
-  const BG_TOP = hex('#1c1638'), BG_BOTTOM = hex('#08080f'), INK = hex('#12121c');
+  // The background colors change with the theme (see THEMES).
+  let BG_TOP = hex('#1c1638'), BG_BOTTOM = hex('#08080f');
+  const INK = hex('#12121c');
   const WHITE = [1, 1, 1];
   const MAX_LIVES = 5, POINTS_PER_LEVEL = 10, LEVELS_PER_SIDE = 3;
   const MIN_SIDES = 3, MAX_SIDES = 8, MENU_SIDES = 6, DOT_COUNT = 40;
@@ -44,9 +46,9 @@
   const SHAPE_RADIUS = 120, TURN_TIME = 0.12;
   const BALL_RADIUS = 16, TRAIL_LEN = 12;
   const FONT = 'Montserrat, "Arial Black", Arial, sans-serif';
-  const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6 };
+  const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6, AWARDS: 7 };
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
-  const VERSION = '1.5.1';
+  const VERSION = '1.6';
   // Hits in a row for x2, x3 and x4. A miss starts the count again.
   const COMBO_STEPS = [10, 25, 50];
   const JOLLY_POINTS = 3, SLOW_TIME = 5, SLOW_FACTOR = 0.5;
@@ -67,8 +69,32 @@
   const NO_TWIST = { id: 'none' };
   // Modes picked on the menu. 60 seconds: a miss costs time, a heart gives some.
   // Zen: no lives and no end, at an easy pace.
-  const MODES = ['classic', 'sprint', 'zen'], MODE_KEY = 'color-spin-mode', SPRINT_BEST_KEY = 'color-spin-best-sprint';
-  const SPRINT_TIME = 60, SPRINT_MISS = 3, SPRINT_HEART = 5, SPRINT_BOOST = 2, ZEN_PACE = 3;
+  // Hardcore: one life, a fast pace from the start, no hearts.
+  const MODES = ['classic', 'sprint', 'zen', 'hardcore'], MODE_KEY = 'color-spin-mode';
+  const SPRINT_TIME = 60, SPRINT_MISS = 3, SPRINT_HEART = 5, SPRINT_BOOST = 2, ZEN_PACE = 3, HARDCORE_BOOST = 3;
+
+  // Colorblind help: a symbol for each color, in PALETTE's order.
+  const SYMBOLS = ['dot', 'square', 'triangle', 'diamond', 'plus', 'cross', 'star', 'bars'];
+  const SYMBOLS_KEY = 'color-spin-symbols', AWARDS_KEY = 'color-spin-awards', LOOK_KEY = 'color-spin-look';
+  // Looks won with the awards: background themes and ball trails. The first of each is free.
+  const THEMES = [
+    { id: 'night', top: '#1c1638', bottom: '#08080f' },
+    { id: 'ocean', top: '#0b2a4a', bottom: '#040a14' },
+    { id: 'forest', top: '#0f2e22', bottom: '#030a06' },
+    { id: 'sunset', top: '#3d1733', bottom: '#0d0510' },
+    { id: 'neon', top: '#2a0b45', bottom: '#06020f' },
+    { id: 'zen', top: '#1c2e36', bottom: '#081014' },
+    { id: 'ember', top: '#3d130c', bottom: '#0c0402' },
+    { id: 'gold', top: '#33270d', bottom: '#0b0803' },
+  ];
+  const TRAILS = ['classic', 'comet', 'sparkle', 'stars', 'rainbow'];
+  // Awards and what each one unlocks; the conditions are in checkAwards().
+  const AWARDS = [
+    ['first', 'theme:ocean'], ['pentagon', 'trail:comet'], ['score_100', 'theme:forest'],
+    ['combo_25', 'trail:sparkle'], ['octagon', 'theme:sunset'], ['specials', 'trail:stars'],
+    ['sprint_60', 'theme:neon'], ['combo_50', 'trail:rainbow'], ['zen_100', 'theme:zen'],
+    ['hardcore_7', 'theme:ember'], ['daily_7', 'theme:gold'],
+  ];
   const SITE_URL = 'https://espertini.com', SITE_LABEL = 'espertini.com', LANG_KEY = 'color-spin-lang';
   // All the game's texts. The texts of the online leaderboard are used only on claude.ai.
   const TEXT = {
@@ -94,6 +120,39 @@
       "daily_rank": "%d° OGGI",
       "daily_rank_of": "%d° OGGI SU %d",
       "share": "CONDIVIDI",
+      "mode_hardcore": "HARDCORE",
+      "mode_info_hardcore": "Una vita sola, ritmo alto, niente cuori",
+      "tab_hardcore": "HARDCORE",
+      "top_hardcore": "I migliori in hardcore",
+      "no_hardcore": "Ancora nessuna partita hardcore",
+      "share_hardcore": "Color Spin · Hardcore: %d punti! Riesci a battermi?",
+      "symbols": "SIMBOLI",
+      "awards": "TROFEI",
+      "awards_count": "%d SU %d",
+      "theme": "TEMA",
+      "trail": "SCIA",
+      "award_unlocked": "TROFEO: %s",
+      "locked": "Si sblocca con il trofeo %s",
+      "award_list": {
+        "first": ["PRIMO GIRO", "Finisci una partita"],
+        "pentagon": ["PENTAGONO", "Arriva al livello 7"],
+        "score_100": ["CENTO", "100 punti in una partita"],
+        "combo_25": ["COMBO X3", "25 palline giuste di fila"],
+        "octagon": ["OTTAGONO", "Arriva al livello 16"],
+        "specials": ["COLLEZIONISTA", "Prendi le 4 palline speciali"],
+        "sprint_60": ["FULMINE", "60 punti in 60 secondi"],
+        "combo_50": ["COMBO X4", "50 palline giuste di fila"],
+        "zen_100": ["PACE INTERIORE", "100 palline in una partita Zen"],
+        "hardcore_7": ["DURO A MORIRE", "Livello 7 in Hardcore"],
+        "daily_7": ["SETTIMANA PERFETTA", "La sfida 7 giorni di fila"]
+      },
+      "themes": {
+        "night": "NOTTE", "ocean": "OCEANO", "forest": "FORESTA", "sunset": "TRAMONTO",
+        "neon": "NEON", "zen": "ZEN", "ember": "BRACE", "gold": "ORO"
+      },
+      "trails": {
+        "classic": "CLASSICA", "comet": "COMETA", "sparkle": "SCINTILLE", "stars": "STELLE", "rainbow": "ARCOBALENO"
+      },
       "mode_classic": "CLASSICA",
       "mode_sprint": "60 SECONDI",
       "mode_zen": "ZEN",
@@ -185,7 +244,8 @@
           "MODALITÀ",
           [
             "60 secondi: un errore costa 3 secondi,",
-            "un cuore ne regala 5. Zen: niente vite."
+            "un cuore ne regala 5. Zen: niente vite.",
+            "Hardcore: una vita sola e ritmo alto."
           ]
         ],
         [
@@ -193,7 +253,8 @@
           [
             "Tocca a sinistra o a destra per ruotare",
             "Tastiera: frecce oppure A e D",
-            "P o Esc pausa  ·  M musica  ·  S suoni"
+            "P o Esc pausa  ·  M musica  ·  S suoni",
+            "Impostazioni: simboli per i daltonici"
           ]
         ],
         [
@@ -236,6 +297,39 @@
       "daily_rank": "#%d TODAY",
       "daily_rank_of": "#%d TODAY OF %d",
       "share": "SHARE",
+      "mode_hardcore": "HARDCORE",
+      "mode_info_hardcore": "One life, a fast pace, no hearts",
+      "tab_hardcore": "HARDCORE",
+      "top_hardcore": "Best in hardcore",
+      "no_hardcore": "No hardcore games yet",
+      "share_hardcore": "Color Spin · Hardcore: %d points! Can you beat me?",
+      "symbols": "SYMBOLS",
+      "awards": "AWARDS",
+      "awards_count": "%d OF %d",
+      "theme": "THEME",
+      "trail": "TRAIL",
+      "award_unlocked": "AWARD: %s",
+      "locked": "Unlocked by the %s award",
+      "award_list": {
+        "first": ["FIRST SPIN", "Finish a game"],
+        "pentagon": ["PENTAGON", "Reach level 7"],
+        "score_100": ["HUNDRED", "100 points in one game"],
+        "combo_25": ["COMBO X3", "25 hits in a row"],
+        "octagon": ["OCTAGON", "Reach level 16"],
+        "specials": ["COLLECTOR", "Catch the 4 special balls"],
+        "sprint_60": ["LIGHTNING", "60 points in 60 seconds"],
+        "combo_50": ["COMBO X4", "50 hits in a row"],
+        "zen_100": ["INNER PEACE", "100 balls in one Zen game"],
+        "hardcore_7": ["DIE HARD", "Level 7 in Hardcore"],
+        "daily_7": ["PERFECT WEEK", "The challenge 7 days in a row"]
+      },
+      "themes": {
+        "night": "NIGHT", "ocean": "OCEAN", "forest": "FOREST", "sunset": "SUNSET",
+        "neon": "NEON", "zen": "ZEN", "ember": "EMBER", "gold": "GOLD"
+      },
+      "trails": {
+        "classic": "CLASSIC", "comet": "COMET", "sparkle": "SPARKLE", "stars": "STARS", "rainbow": "RAINBOW"
+      },
       "mode_classic": "CLASSIC",
       "mode_sprint": "60 SECONDS",
       "mode_zen": "ZEN",
@@ -327,7 +421,8 @@
           "MODES",
           [
             "60 seconds: a miss costs 3 seconds,",
-            "a heart gives 5 more. Zen: no lives."
+            "a heart gives 5 more. Zen: no lives.",
+            "Hardcore: one life and a fast pace."
           ]
         ],
         [
@@ -335,7 +430,8 @@
           [
             "Tap left or right to spin",
             "Keyboard: arrows or A and D",
-            "P or Esc pause  ·  M music  ·  S sounds"
+            "P or Esc pause  ·  M music  ·  S sounds",
+            "Settings: symbols for colorblind players"
           ]
         ],
         [
@@ -380,6 +476,105 @@
   // `let`: the share card borrows it to draw with the same functions.
   let ctx = canvas.getContext('2d');
   let W = BASE_W, H = BASE_H, scale = 1, dpr = 1;
+
+  // --- Looks and awards ------------------------------------------------------
+  const loadJSON = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
+  const saveJSON = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
+  let symbolsOn = loadJSON(SYMBOLS_KEY, false) === true;
+  // got: award id -> when it was won; caught: the special balls ever caught.
+  const awardsRec = loadJSON(AWARDS_KEY, {});
+  awardsRec.got ||= {}; awardsRec.caught ||= [];
+  const isUnlocked = reward => reward === 'theme:night' || reward === 'trail:classic' ||
+    AWARDS.some(([id, r]) => r === reward && awardsRec.got[id]);
+  const look = loadJSON(LOOK_KEY, {});
+  if (!isUnlocked(`theme:${look.theme}`)) look.theme = 'night';
+  if (!isUnlocked(`trail:${look.trail}`)) look.trail = 'classic';
+  function applyTheme() {
+    const t = THEMES.find(t => t.id === look.theme) || THEMES[0];
+    BG_TOP = hex(t.top); BG_BOTTOM = hex(t.bottom);
+    document.documentElement.style.setProperty('--bg', t.bottom);
+  }
+  applyTheme();
+
+  function toggleSymbols() {
+    symbolsOn = !symbolsOn;
+    saveJSON(SYMBOLS_KEY, symbolsOn);
+    sfx.play('click');
+  }
+
+  // A small shape centered on x, y; s is about its half size.
+  function drawSymbol(kind, x, y, s, fill) {
+    ctx.fillStyle = ctx.strokeStyle = fill; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    if (kind === 'dot') { ctx.arc(x, y, s * 0.55, 0, TAU); ctx.fill(); }
+    else if (kind === 'square') { ctx.rect(x - s * 0.5, y - s * 0.5, s, s); ctx.fill(); }
+    else if (kind === 'triangle') {
+      ctx.moveTo(x, y - s * 0.7); ctx.lineTo(x + s * 0.7, y + s * 0.5); ctx.lineTo(x - s * 0.7, y + s * 0.5); ctx.closePath(); ctx.fill();
+    } else if (kind === 'diamond') {
+      ctx.moveTo(x, y - s * 0.75); ctx.lineTo(x + s * 0.55, y); ctx.lineTo(x, y + s * 0.75); ctx.lineTo(x - s * 0.55, y); ctx.closePath(); ctx.fill();
+    } else if (kind === 'plus' || kind === 'cross') {
+      const k = kind === 'plus' ? [[-0.7, 0, 0.7, 0], [0, -0.7, 0, 0.7]] : [[-0.5, -0.5, 0.5, 0.5], [-0.5, 0.5, 0.5, -0.5]];
+      for (const [a, b, c, d] of k) { ctx.moveTo(x + a * s, y + b * s); ctx.lineTo(x + c * s, y + d * s); }
+      ctx.lineWidth = s * 0.36; ctx.stroke();
+    } else if (kind === 'star') {
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? s * 0.35 : s * 0.8;
+        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+      }
+      ctx.closePath(); ctx.fill();
+    } else if (kind === 'bars') {
+      for (const dx of [-0.3, 0.3]) { ctx.moveTo(x + dx * s, y - s * 0.6); ctx.lineTo(x + dx * s, y + s * 0.6); }
+      ctx.lineWidth = s * 0.3; ctx.stroke();
+    }
+  }
+
+  // One piece of a ball's trail: i counts back from the ball, len is the trail length.
+  const trailLen = () => look.trail === 'comet' ? 24 : TRAIL_LEN;
+  function trailPiece(style, x, y, i, len, c, r = BALL_RADIUS) {
+    const t = 1 - (i + 1) / (len + 1);
+    const tc = style === 'rainbow' ? PALETTE[(i + Math.floor(time * 12)) % PALETTE.length] : c;
+    if (style === 'stars') {
+      if (i % 3 === 1) drawSymbol('star', x, y, r * (0.4 + 0.6 * t), rgba(tc, 0.6 * t));
+      return;
+    }
+    circle(x, y, r * (0.3 + 0.6 * t), rgba(tc, (style === 'comet' ? 0.3 : style === 'rainbow' ? 0.35 : 0.22) * t));
+    if (style === 'sparkle' && (i * 7 + Math.floor(time * 24)) % 5 === 0)
+      circle(x + ((i * 37) % 17 - 8) * r / 16, y + ((i * 53) % 17 - 8) * r / 16, 2.5 * r / 16, `rgba(255,255,255,${0.9 * t})`);
+  }
+
+  // Awards are checked on every hit and at the end of a game.
+  const awardQueue = [], AWARD_TIME = 2.2;
+  function checkAwards() {
+    const fair = mode !== 'zen'; // levels, points and combos come easy in Zen
+    const cond = {
+      first: state === STATE.GAME_OVER,
+      pentagon: fair && level >= 7,
+      score_100: fair && score >= 100,
+      combo_25: fair && streak >= 25,
+      octagon: fair && level >= 16,
+      specials: ['heart', 'jolly', 'slow', 'chameleon'].every(k => awardsRec.caught.includes(k)),
+      sprint_60: mode === 'sprint' && score >= 60,
+      combo_50: fair && streak >= 50,
+      zen_100: mode === 'zen' && hits >= 100,
+      hardcore_7: mode === 'hardcore' && level >= 7,
+      daily_7: dayStreak() >= 7,
+    };
+    for (const [id] of AWARDS) {
+      if (awardsRec.got[id] || !cond[id]) continue;
+      awardsRec.got[id] = Date.now();
+      awardQueue.push({ text: tr('award_unlocked', TEXT[lang].award_list[id][0]), time: AWARD_TIME });
+      if (awardQueue.length === 1) sfx.play('figure');
+    }
+    saveJSON(AWARDS_KEY, awardsRec);
+  }
+  const awardName = reward => {
+    const [id] = AWARDS.find(([, r]) => r === reward) || [];
+    return id ? TEXT[lang].award_list[id][0] : '';
+  };
+  const rewardName = reward => {
+    const [kind, id] = reward.split(':');
+    return `${tr(kind)} ${TEXT[lang][kind === 'theme' ? 'themes' : 'trails'][id]}`;
+  };
 
   // --- Figure ---------------------------------------------------------------
   const shape = {
@@ -453,6 +648,16 @@
       }
       ctx.strokeStyle = 'rgba(13,13,23,0.55)'; ctx.lineWidth = 3;
       for (const v of verts) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(v[0], v[1]); ctx.stroke(); }
+      if (symbolsOn) {
+        // Each side's symbol, kept upright while the shape turns.
+        const d = SHAPE_RADIUS * Math.cos(Math.PI / n) * 0.64;
+        for (let i = 0; i < n; i++) {
+          const a = this.baseAngle + (i + 0.5) * st;
+          ctx.save(); ctx.translate(Math.cos(a) * d, Math.sin(a) * d); ctx.rotate(-this.rotation);
+          drawSymbol(SYMBOLS[PALETTE.indexOf(this.colors[i])], 0, 0, 12, rgba(INK, 0.85));
+          ctx.restore();
+        }
+      }
       ctx.beginPath(); ctx.arc(0, 0, 18, 0, TAU);
       ctx.fillStyle = 'rgb(18,18,26)'; ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2; ctx.stroke();
@@ -816,7 +1021,7 @@
     const [db, user] = cl && cl.use ? await Promise.all([cl.use('db'), cl.use('user')]) : [null, null];
     if (!db) {
       useLocalBoard(); refreshGlobal(); syncGlobal();
-      for (const rb of [daily, sprint]) { refreshRemote(rb); syncRemote(rb); }
+      for (const rb of Object.values(modeBoards)) { refreshRemote(rb); syncRemote(rb); }
       return;
     }
     board.db = db; board.user = user;
@@ -832,7 +1037,7 @@
       board.status = 'ready';
       refreshNames();
     }, () => { if (board.status === 'loading') useLocalBoard(); });
-    initClaudeBoard(daily); initClaudeBoard(sprint);
+    for (const rb of Object.values(modeBoards)) initClaudeBoard(rb);
   }
   async function refreshNames(rows = board.rows) {
     if (!board.user || !rows.length) return;
@@ -841,7 +1046,7 @@
   }
   // The daily and 60-second boards on claude.ai: one document per player,
   // daily/<user id> = {day, score, level, at} (their best of that day) and
-  // sprint/<user id> = {score, level, at}.
+  // sprint/<user id> and hardcore/<user id> = {score, level, at}.
   async function initClaudeBoard(rb) {
     const day = today(), isDaily = rb === daily;
     Object.assign(rb, { source: 'claude', day, status: 'loading' });
@@ -1016,7 +1221,8 @@
       lastGame: null, busy: false,
     };
   }
-  const daily = remoteBoard('daily'), sprint = remoteBoard('sprint');
+  const daily = remoteBoard('daily'), sprint = remoteBoard('sprint'), hardcore = remoteBoard('hardcore');
+  const modeBoards = { daily, sprint, hardcore };
   const savePendingOf = rb => {
     try { localStorage.setItem(rb.key, JSON.stringify(rb.pending)); } catch {}
   };
@@ -1094,7 +1300,7 @@
       for (const [ch, c] of word) { text(x, 130, ch, 88, c); x += ctx.measureText(ch).width; }
       const n = dayNumber(gameDay);
       const sub = mode === 'daily' ? `${tr('daily', n)}  ·  ${twistText(twist)[0]}`
-        : mode === 'sprint' ? `${tr('mode_sprint')}  ·  ${tr('card_classic')}` : tr('card_classic');
+        : mode === 'sprint' || mode === 'hardcore' ? `${tr(`mode_${mode}`)}  ·  ${tr('card_classic')}` : tr('card_classic');
       text(S / 2, 200, sub, 34, PALETTE[2], 1, 'center');
       ctx.save(); ctx.translate(S / 2, 470); ctx.scale(1.6, 1.6); shape.draw(0, 0); ctx.restore();
       text(S / 2, 860, String(score), 170, WHITE, 1, 'center');
@@ -1109,13 +1315,13 @@
     return card;
   }
   // The board of the mode being played, when it has its own.
-  const modeBoard = () => mode === 'daily' ? daily : mode === 'sprint' ? sprint : null;
+  const modeBoard = () => modeBoards[mode] || null;
   const rankText = rb => rb === daily
     ? (rb.players ? tr('daily_rank_of', rb.me.rank, rb.players) : tr('daily_rank', rb.me.rank))
     : (rb.players ? tr('rank_of', rb.me.rank, rb.players) : tr('rank', rb.me.rank));
   function shareText() {
     const t = mode === 'daily' ? tr('share_daily', dayNumber(gameDay), twistText(twist)[0], score)
-      : mode === 'sprint' ? tr('share_sprint', score) : tr('share_classic', score);
+      : mode === 'sprint' || mode === 'hardcore' ? tr(`share_${mode}`, score) : tr('share_classic', score);
     return `${t} https://${SHARE_URL}`;
   }
   async function share() {
@@ -1207,8 +1413,13 @@
   // The mode picked on the menu, and the 60-second clock.
   let menuMode = (() => { try { return localStorage.getItem(MODE_KEY); } catch { return null; } })();
   if (!MODES.includes(menuMode)) menuMode = 'classic';
-  let modeFlash = 0, aboutScroll = 0, aboutVel = 0, aboutMax = 0;
-  let clock = 0, bestSprint = (() => { try { return parseInt(localStorage.getItem(SPRINT_BEST_KEY), 10) || 0; } catch { return 0; } })();
+  let modeFlash = 0, pageScroll = 0, pageVel = 0, pageMax = 0;
+  let clock = 0;
+  // Records of the 60-second and hardcore modes (the classic one is `best`).
+  const records = {};
+  for (const m of ['sprint', 'hardcore']) {
+    try { records[m] = parseInt(localStorage.getItem(`color-spin-best-${m}`), 10) || 0; } catch { records[m] = 0; }
+  }
   let seen = (() => { try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY)) || []); } catch { return new Set(); } })();
   let balls = [];
   let dots = [];
@@ -1224,6 +1435,7 @@
     hideNameInput();
     balls = []; clearFx();
     state = STATE.MENU; shape.setup(MENU_SIDES); menuTurnTimer = 1; fade = 1;
+    awardQueue.length = 0; // the awards page lists them anyway
     music.playMenu();
   }
 
@@ -1232,7 +1444,7 @@
     mode = m; gameDay = today();
     twist = mode === 'daily' ? twistFor(gameDay) : NO_TWIST;
     rng = mode === 'daily' ? seededRandom(`color-spin-${gameDay}`) : Math.random;
-    maxLives = twist.lives || MAX_LIVES;
+    maxLives = mode === 'hardcore' ? 1 : twist.lives || MAX_LIVES;
     balls = []; clearFx();
     score = 0; lives = maxLives; level = 1; newBest = false; spawnTimer = 1;
     hits = 0; bestStreak = 0; comboPop = 0; slowTime = 0; hint = null;
@@ -1249,13 +1461,14 @@
     } else if (mode === 'sprint') {
       hint = { title: tr('mode_sprint'), line: tr('mode_info_sprint'), time: 3.5 };
       refreshRemote(sprint);
-    } else if (mode === 'zen') {
-      hint = { title: tr('mode_zen'), line: tr('mode_info_zen'), time: 3.5 };
+    } else if (mode === 'zen' || mode === 'hardcore') {
+      hint = { title: tr(`mode_${mode}`), line: tr(`mode_info_${mode}`), time: 3.5 };
+      if (mode === 'hardcore') refreshRemote(hardcore);
     } else showBanner(tr('banner_level', 1));
   }
   // Zen keeps the music calm: the first tempo and at most three instruments more.
   const musicLevel = () => mode === 'zen' ? [1, Math.min(tier(level), 2)] : [level, tier(level)];
-  const hasLives = () => mode === 'classic' || mode === 'daily';
+  const hasLives = () => mode === 'classic' || mode === 'daily' || mode === 'hardcore';
 
   const tier = lvl => Math.min(Math.floor((lvl - 1) / LEVELS_PER_SIDE), MAX_SIDES - MIN_SIDES);
   const sidesForLevel = lvl => MIN_SIDES + tier(lvl);
@@ -1265,7 +1478,8 @@
   }
   // Zen stops getting faster at an easy pace; 60 seconds starts at a brisker one.
   const pace = () => mode === 'zen' ? Math.min(difficulty(), ZEN_PACE)
-    : mode === 'sprint' ? difficulty() + SPRINT_BOOST : difficulty();
+    : mode === 'sprint' ? difficulty() + SPRINT_BOOST
+    : mode === 'hardcore' ? difficulty() + HARDCORE_BOOST : difficulty();
   const travelTime = () => Math.max(1, 2.9 - 0.25 * pace()) / (twist.speed || 1);
   const spawnInterval = () => Math.max(0.5, 1.7 - 0.18 * pace());
   const maxBalls = () => Math.min(level + 1, 3 + tier(level));
@@ -1285,7 +1499,9 @@
       // The rule of the day can bring a ball in earlier or make it more frequent.
       // Zen has nothing to win back and no surprises.
       if (mode === 'zen' && (kind === 'heart' || kind === 'chameleon')) continue;
-      const [from, often] = (twist.special && twist.special[kind]) || [usual];
+      if (mode === 'hardcore' && kind === 'heart') continue;
+      const [from, often] = mode === 'hardcore' && kind === 'chameleon' ? [10]
+        : (twist.special && twist.special[kind]) || [usual];
       if (level < from) continue;
       const c = chance(from);
       p += often !== undefined && c > 0 ? often : c;
@@ -1349,6 +1565,8 @@
     if (b.kind === 'slow') { slowTime = SLOW_TIME; music.setSlow(true); sfx.play('power'); showBanner(tr('banner_slow')); }
     if (b.kind === 'jolly') { sfx.play('power'); for (const c of shape.colors) burst(b.x, b.y, c, 3, 320); }
     if (hits % POINTS_PER_LEVEL === 0) levelUp();
+    if (b.kind && !awardsRec.caught.includes(b.kind)) awardsRec.caught.push(b.kind);
+    checkAwards();
   }
 
   function onMiss(b) {
@@ -1392,6 +1610,12 @@
 
   function gameOver() {
     state = STATE.GAME_OVER; gameOverTime = 0;
+    finishGame();
+  }
+  function finishGame() {
+    try { recordGame(); } finally { checkAwards(); }
+  }
+  function recordGame() {
     sfx.play('game_over'); music.stop();
     for (const b of balls) b.dead = true;
     for (const c of shape.colors) burst(0, 0, c, 10, 450);
@@ -1405,15 +1629,17 @@
       else if (submitRemote(daily, score, level, hits, playTime)) showNameInput();
       return;
     }
-    if (mode === 'sprint') {
+    if (mode === 'sprint' || mode === 'hardcore') {
+      // Their own record and board.
+      const rb = modeBoards[mode];
       board.localHighlight = -1;
-      if (score > bestSprint) {
-        bestSprint = score; newBest = true;
-        try { localStorage.setItem(SPRINT_BEST_KEY, String(bestSprint)); } catch {}
+      if (score > records[mode]) {
+        records[mode] = score; newBest = true;
+        try { localStorage.setItem(`color-spin-best-${mode}`, String(score)); } catch {}
       }
-      if (sprint.source === 'claude') submitClaudeBoard(sprint, score, level);
-      else if (score > (sprint.me?.score || 0) && score > (sprint.pending?.score || 0) &&
-        submitRemote(sprint, score, level, hits, playTime)) { lastGameImproved = true; showNameInput(); }
+      if (rb.source === 'claude') submitClaudeBoard(rb, score, level);
+      else if (score > (rb.me?.score || 0) && score > (rb.pending?.score || 0) &&
+        submitRemote(rb, score, level, hits, playTime)) { lastGameImproved = true; showNameInput(); }
       return;
     }
     if (score > best) { best = score; newBest = true; saveBest(); }
@@ -1447,16 +1673,18 @@
       { x: W / 2 - 200, y: y + 136, w: 400, h: 100 },
       { x: W / 2 - 268, y: y + 18, w: 76, h: 76 },
       { x: W / 2 + 192, y: y + 18, w: 76, h: 76 },
+      { x: 108, y: 24, w: 68, h: 68 },
     ];
   };
-  // Classic, 60 seconds, today.
-  const boardTabs = () => [0, 1, 2].map(i => ({ x: W / 2 - 310 + i * 210, y: H * 0.1 + 30, w: 200, h: 56 }));
-  const BOARD_TABS = ['all', 'sprint', 'today'];
+  // Classic, 60 seconds, hardcore, today.
+  const BOARD_TABS = ['all', 'sprint', 'hardcore', 'today'];
+  const boardTabs = () => BOARD_TABS.map((t, i) => ({ x: W / 2 - 332 + i * 168, y: H * 0.1 + 30, w: 160, h: 56 }));
 
   const settingsButton = () => ({ x: W - 92, y: 24, w: 68, h: 68 });
   // Music, sounds, language, back.
-  const settingsButtons = () => [0, 1, 2, 3].map(i =>
-    ({ x: W / 2 - 260, y: H * 0.3 + i * 104 + (i === 3 ? 40 : 0), w: 520, h: 84 }));
+  // Music, sounds, language, symbols, back.
+  const settingsButtons = () => [0, 1, 2, 3, 4].map(i =>
+    ({ x: W / 2 - 260, y: H * 0.28 + i * 104 + (i === 4 ? 40 : 0), w: 520, h: 84 }));
   let linkRect = { x: 0, y: 0, w: 0, h: 0 }; // the site link on the about screen, set when drawn
   const infoButton = () => ({ x: 24, y: 24, w: 68, h: 68 });
   // Top center, between the score and the lives.
@@ -1491,9 +1719,11 @@
       }
       else if (action === 'tap' && hit(menuButtons()[1], pos)) {
         sfx.play('click'); state = STATE.LEADERBOARD; fade = 0.6; refreshNames();
-        boardTab = menuMode === 'sprint' ? 'sprint' : 'all';
+        boardTab = BOARD_TABS.includes(menuMode) ? menuMode : 'all';
         if (board.status === 'global' || board.status === 'local') { refreshGlobal(); syncGlobal(); }
-        for (const rb of [daily, sprint]) { refreshRemote(rb); syncRemote(rb); }
+        for (const rb of Object.values(modeBoards)) { refreshRemote(rb); syncRemote(rb); }
+      } else if (action === 'tap' && hit(menuButtons()[5], pos)) {
+        sfx.play('click'); state = STATE.AWARDS; fade = 0.6; pageScroll = pageVel = 0;
       } else if (action === 'tap' && hit(menuButtons()[2], pos)) {
         start('daily');
       } else if (action === 'left' || action === 'right' || (action === 'tap' && (hit(menuButtons()[3], pos) || hit(menuButtons()[4], pos)))) {
@@ -1503,7 +1733,7 @@
         try { localStorage.setItem(MODE_KEY, menuMode); } catch {}
         sfx.play(dir < 0 ? 'turn_left' : 'turn_right'); modeFlash = dir;
       } else if (action === 'info' || (action === 'tap' && hit(infoButton(), pos))) {
-        sfx.play('click'); state = STATE.ABOUT; fade = 0.6; aboutScroll = aboutVel = 0;
+        sfx.play('click'); state = STATE.ABOUT; fade = 0.6; pageScroll = pageVel = 0;
       } else if (action !== 'back') start(menuMode);
     } else if (state === STATE.PLAYING) {
       if (action === 'pause' || action === 'back' || (action === 'tap' && hit(grow(pauseButton(), 12), pos))) {
@@ -1541,16 +1771,20 @@
       if (action === 'tap' && hit(rows[0], pos)) toggleMusic();
       else if (action === 'tap' && hit(rows[1], pos)) toggleSound();
       else if (action === 'tap' && hit(rows[2], pos)) toggleLanguage();
-      else if (action === 'back' || (action === 'tap' && hit(rows[3], pos))) {
+      else if (action === 'tap' && hit(rows[3], pos)) toggleSymbols();
+      else if (action === 'back' || (action === 'tap' && hit(rows[4], pos))) {
         sfx.play('click'); state = STATE.MENU; fade = 0.6;
       }
     } else if (state === STATE.LEADERBOARD && action === 'tap' && boardTabs().some(r => hit(r, pos))) {
       sfx.play('click');
       boardTab = BOARD_TABS[boardTabs().findIndex(r => hit(r, pos))];
-      if (boardTab === 'today') refreshRemote(daily);
-      if (boardTab === 'sprint') refreshRemote(sprint);
-    } else if (state === STATE.ABOUT && (action === 'up' || action === 'down')) {
-      aboutVel = 0; aboutScroll = clamp(aboutScroll + (action === 'up' ? -120 : 120), 0, aboutMax);
+      const rb = boardTab === 'today' ? daily : modeBoards[boardTab];
+      if (rb) refreshRemote(rb);
+    } else if (scrolls() && (action === 'up' || action === 'down')) {
+      pageVel = 0; pageScroll = clamp(pageScroll + (action === 'up' ? -120 : 120), 0, pageMax);
+    } else if (state === STATE.AWARDS && action === 'tap' && pos.y < pageBottom() &&
+      lookRects.some(o => hit(o.r, { x: pos.x, y: pos.y + pageScroll }))) {
+      pickLook(lookRects.find(o => hit(o.r, { x: pos.x, y: pos.y + pageScroll })));
     } else if (state === STATE.ABOUT && action === 'tap' && hit(linkRect, pos)) {
       sfx.play('click'); openLink(SITE_URL);
     } else {
@@ -1563,16 +1797,18 @@
     const r = canvas.getBoundingClientRect();
     return { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
   };
-  // The About page scrolls: there a tap is a release that didn't drag.
+  // The About and awards pages scroll: there a tap is a release that didn't drag.
   let drag = null;
+  const scrolls = () => state === STATE.ABOUT || state === STATE.AWARDS;
+  const pageBottom = () => H * 0.9 - 56;
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
     e.preventDefault();
     canvas.focus({ preventScroll: true });
-    if (state === STATE.ABOUT) {
+    if (scrolls()) {
       sfx.unlock();
-      drag = { pos: pointerPos(e), y: e.clientY, from: aboutScroll, moved: false, last: e.clientY, t: performance.now() };
-      aboutVel = 0;
+      drag = { pos: pointerPos(e), y: e.clientY, from: pageScroll, moved: false, last: e.clientY, t: performance.now() };
+      pageVel = 0;
       try { canvas.setPointerCapture(e.pointerId); } catch {}
       return;
     }
@@ -1583,9 +1819,9 @@
     const dy = (e.clientY - drag.y) / scale, now = performance.now();
     if (Math.abs(dy) > 10) drag.moved = true;
     if (!drag.moved) return;
-    aboutScroll = clamp(drag.from - dy, 0, aboutMax);
+    pageScroll = clamp(drag.from - dy, 0, pageMax);
     const dt = Math.max((now - drag.t) / 1000, 0.001);
-    aboutVel = -(e.clientY - drag.last) / scale / dt;
+    pageVel = -(e.clientY - drag.last) / scale / dt;
     drag.last = e.clientY; drag.t = now;
   });
   const endDrag = e => {
@@ -1593,14 +1829,14 @@
     const d = drag;
     drag = null;
     if (e.type === 'pointerup' && !d.moved) handle('tap', d.pos);
-    else if (performance.now() - d.t > 80) aboutVel = 0; // held still before letting go
+    else if (performance.now() - d.t > 80) pageVel = 0; // held still before letting go
   };
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
   canvas.addEventListener('wheel', e => {
-    if (state !== STATE.ABOUT) return;
+    if (!scrolls()) return;
     e.preventDefault();
-    aboutVel = 0; aboutScroll = clamp(aboutScroll + e.deltaY / scale, 0, aboutMax);
+    pageVel = 0; pageScroll = clamp(pageScroll + e.deltaY / scale, 0, pageMax);
   }, { passive: false });
   const KEYS = {
     ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right',
@@ -1610,7 +1846,7 @@
   window.addEventListener('keydown', e => {
     if (e.ctrlKey || e.metaKey || e.altKey || e.target === nameInput) return;
     // Up and down scroll the About page.
-    const scroll = state === STATE.ABOUT && { ArrowUp: 'up', ArrowDown: 'down' }[e.key];
+    const scroll = scrolls() && { ArrowUp: 'up', ArrowDown: 'down' }[e.key];
     if (scroll) { e.preventDefault(); handle(scroll); return; }
     if (e.repeat || !KEYS[e.key]) return;
     if (e.key !== 'Escape') e.preventDefault();
@@ -1679,12 +1915,13 @@
     comboPop = Math.max(comboPop - dt * 2, 0);
     bannerTime = Math.max(bannerTime - dt, 0);
     if (toast && (toast.time -= dt) <= 0) toast = null;
+    if (awardQueue.length && (awardQueue[0].time -= dt) <= 0) { awardQueue.shift(); if (awardQueue.length) sfx.play('figure'); }
     modeFlash = modeFlash > 0 ? Math.max(modeFlash - dt * 5, 0) : Math.min(modeFlash + dt * 5, 0);
-    if (aboutVel && !drag) {
+    if (pageVel && !drag) {
       // A flick keeps the About page going for a moment.
-      aboutScroll = clamp(aboutScroll + aboutVel * dt, 0, aboutMax);
-      aboutVel *= Math.exp(-4 * dt);
-      if (Math.abs(aboutVel) < 5 || aboutScroll === 0 || aboutScroll === aboutMax) aboutVel = 0;
+      pageScroll = clamp(pageScroll + pageVel * dt, 0, pageMax);
+      pageVel *= Math.exp(-4 * dt);
+      if (Math.abs(pageVel) < 5 || pageScroll === 0 || pageScroll === pageMax) pageVel = 0;
     }
     arrowFlash = arrowFlash.map(v => Math.max(v - dt * 4, 0));
     worldX = W / 2 + rand(-1, 1) * shake;
@@ -1694,7 +1931,7 @@
     const k = slowTime > 0 ? SLOW_FACTOR : 1;
     for (const b of balls) {
       b.trail.unshift([b.x, b.y]);
-      if (b.trail.length > TRAIL_LEN) b.trail.pop();
+      while (b.trail.length > trailLen()) b.trail.pop();
       b.x += b.vx * dt * k; b.y += b.vy * dt * k;
       if (b.switchAt && Math.hypot(b.x, b.y) < b.switchAt) {
         b.switchAt = 0;
@@ -1774,15 +2011,14 @@
     for (const b of balls) {
       const x = worldX + b.x, y = worldY + b.y;
       const c = b.kind === 'jolly' ? jollyColor(b) : b.color;
-      b.trail.forEach(([tx, ty], i) => {
-        const t = 1 - (i + 1) / (TRAIL_LEN + 1);
-        circle(worldX + tx, worldY + ty, BALL_RADIUS * (0.3 + 0.6 * t), rgba(c, 0.22 * t));
-      });
+      const len = trailLen();
+      b.trail.forEach(([tx, ty], i) => trailPiece(look.trail, worldX + tx, worldY + ty, i, len, c));
       circle(x, y, BALL_RADIUS * 2, rgba(c, 0.07));
       circle(x, y, BALL_RADIUS * 1.45, rgba(c, 0.15));
       if (!b.kind) {
         circle(x, y, BALL_RADIUS, rgba(c));
-        circle(x - 5, y - 5, BALL_RADIUS * 0.35, 'rgba(255,255,255,0.45)');
+        if (symbolsOn) drawSymbol(SYMBOLS[b.ci], x, y, 11, rgba(INK, 0.85));
+        else circle(x - 5, y - 5, BALL_RADIUS * 0.35, 'rgba(255,255,255,0.45)');
         continue;
       }
       drawSpecial(b, x, y, c);
@@ -1804,24 +2040,30 @@
       return;
     }
     circle(x, y, BALL_RADIUS, rgba(c));
+    if (symbolsOn) {
+      drawSymbol(SYMBOLS[b.ci], x, y, 11, rgba(INK, 0.85));
+      if (b.kind === 'chameleon' && !b.switchAt) return;
+      // Its own icon moves to a badge at the top right.
+      x += 15; y -= 15;
+      circle(x, y, 9, rgba(INK, 0.9));
+    }
+    const s = symbolsOn ? 4.5 : 7;
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
     ctx.beginPath();
     if (b.kind === 'heart') {
-      const s = 7;
       ctx.moveTo(x, y + s);
       ctx.bezierCurveTo(x - s * 1.7, y - s * 0.1, x - s * 0.7, y - s * 1.4, x, y - s * 0.45);
       ctx.bezierCurveTo(x + s * 0.7, y - s * 1.4, x + s * 1.7, y - s * 0.1, x, y + s);
       ctx.fill();
     } else if (b.kind === 'slow') {
-      const s = 7;
       ctx.moveTo(x - s, y - s); ctx.lineTo(x + s, y - s); ctx.lineTo(x - s, y + s); ctx.lineTo(x + s, y + s);
       ctx.closePath(); ctx.fill();
     } else if (b.kind === 'chameleon' && b.switchAt) {
       // Dashes spinning around it until it changes color.
       ctx.save();
       ctx.setLineDash([5, 5]); ctx.lineDashOffset = -time * 40;
-      ctx.arc(x, y, BALL_RADIUS - 5, 0, TAU);
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 3; ctx.stroke();
+      ctx.arc(x, y, symbolsOn ? 6 : BALL_RADIUS - 5, 0, TAU);
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = symbolsOn ? 2 : 3; ctx.stroke();
       ctx.restore();
     } else {
       circle(x - 5, y - 5, BALL_RADIUS * 0.35, 'rgba(255,255,255,0.45)');
@@ -1884,6 +2126,93 @@
     ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.beginPath(); ctx.moveTo(cx - dir * 6, cy - 13); ctx.lineTo(cx + dir * 7, cy); ctx.lineTo(cx - dir * 6, cy + 13); ctx.stroke();
   }
+  // A medal on a ribbon; a dot on it while an award is new.
+  function drawMedalIcon(r) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2 + 4, col = 'rgba(255,255,255,0.75)';
+    ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx - 9, cy - 20); ctx.lineTo(cx - 3, cy - 8); ctx.moveTo(cx + 9, cy - 20); ctx.lineTo(cx + 3, cy - 8); ctx.stroke();
+    circle(cx, cy + 3, 12, col);
+    drawSymbol('star', cx, cy + 3, 8, rgba(BG_TOP));
+  }
+  // A small padlock.
+  function drawLock(x, y) {
+    ctx.strokeStyle = ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y - 4, 7, Math.PI, 0); ctx.stroke();
+    ctx.fillRect(x - 10, y - 4, 20, 15);
+  }
+
+  // The awards page: themes and trails to pick (the unlocked ones), then the awards.
+  let lookRects = [];
+  function pickLook(o) {
+    const reward = `${o.kind}:${o.id}`;
+    if (!isUnlocked(reward)) { sfx.play('click'); showToast(tr('locked', awardName(reward))); return; }
+    look[o.kind] = o.id;
+    saveJSON(LOOK_KEY, look);
+    if (o.kind === 'theme') applyTheme();
+    sfx.play('turn_right');
+  }
+  function drawAwards() {
+    ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
+    const bottom = pageBottom();
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, W, bottom); ctx.clip();
+    ctx.translate(0, -pageScroll);
+    lookRects = [];
+    const got = AWARDS.filter(([id]) => awardsRec.got[id]).length;
+    centered(tr('awards'), H * 0.1, 60, WHITE);
+    centered(tr('awards_count', got, AWARDS.length), H * 0.1 + 40, 20, WHITE, 0.5);
+    let y = H * 0.1 + 120;
+    const swatch = (cx, cy, kind, id, paint) => {
+      const open = isUnlocked(`${kind}:${id}`), on = look[kind] === id;
+      ctx.globalAlpha = open ? 1 : 0.35;
+      paint(cx, cy);
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(cx, cy, 42, 0, TAU);
+      ctx.strokeStyle = on ? rgba(PALETTE[2]) : 'rgba(255,255,255,0.2)'; ctx.lineWidth = on ? 5 : 2; ctx.stroke();
+      if (!open) drawLock(cx, cy);
+      text(cx, cy + 70, TEXT[lang][kind === 'theme' ? 'themes' : 'trails'][id], 16, on ? PALETTE[2] : WHITE, open ? 0.85 : 0.35, 'center');
+      lookRects.push({ r: { x: cx - 60, y: cy - 50, w: 120, h: 130 }, kind, id });
+    };
+    centered(tr('theme'), y, 26, PALETTE[2]);
+    y += 76;
+    THEMES.forEach((th, i) => swatch(W / 2 - 225 + (i % 4) * 150, y + Math.floor(i / 4) * 140, 'theme', th.id, (cx, cy) => {
+      const g = ctx.createLinearGradient(0, cy - 42, 0, cy + 42);
+      g.addColorStop(0, th.top); g.addColorStop(1, th.bottom);
+      ctx.beginPath(); ctx.arc(cx, cy, 42, 0, TAU); ctx.fillStyle = g; ctx.fill();
+      [0, 1, 2].forEach(k => circle(cx - 14 + k * 14, cy + 4, 5, rgba(PALETTE[k * 2])));
+    }));
+    y += 140 + 110;
+    centered(tr('trail'), y, 26, PALETTE[2]);
+    y += 76;
+    TRAILS.forEach((id, i) => swatch(W / 2 - 256 + i * 128, y, 'trail', id, (cx, cy) => {
+      circle(cx, cy, 42, 'rgba(255,255,255,0.06)');
+      const len = id === 'comet' ? 10 : 6;
+      for (let k = len - 1; k >= 0; k--) trailPiece(id, cx + 16 - (k + 1) * 5, cy, k, len, PALETTE[1], 8);
+      circle(cx + 16, cy, 8, rgba(PALETTE[1]));
+    }));
+    y += 140;
+    AWARDS.forEach(([id, reward], i) => {
+      const has = !!awardsRec.got[id], ry = y + i * 92, [title, desc] = TEXT[lang].award_list[id];
+      ctx.fillStyle = has ? rgba(PALETTE[2], 0.14) : 'rgba(255,255,255,0.05)';
+      roundRect({ x: 40, y: ry, w: W - 80, h: 80 }, 16); ctx.fill();
+      circle(86, ry + 40, 24, has ? rgba(PALETTE[2]) : 'rgba(255,255,255,0.12)');
+      drawSymbol('star', 86, ry + 40, 15, has ? rgba(INK) : 'rgba(255,255,255,0.3)');
+      text(126, ry + 35, title, 22, WHITE, has ? 1 : 0.6);
+      text(126, ry + 63, desc, 17, WHITE, has ? 0.65 : 0.4);
+      text(W - 60, ry + 49, rewardName(reward), 15, has ? PALETTE[2] : WHITE, has ? 0.9 : 0.35, 'right');
+    });
+    y += AWARDS.length * 92;
+    ctx.restore();
+    pageMax = Math.max(0, y + 20 - bottom);
+    pageScroll = Math.min(pageScroll, pageMax);
+    if (pageScroll < pageMax - 1) {
+      const g = ctx.createLinearGradient(0, bottom - 90, 0, bottom);
+      g.addColorStop(0, rgba(BG_BOTTOM, 0)); g.addColorStop(1, rgba(BG_BOTTOM, 0.95));
+      ctx.fillStyle = g; ctx.fillRect(0, bottom - 90, W, 90);
+    }
+    centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
+  }
+
   // A cup on a stand.
   function drawTrophyIcon(r) {
     const cx = r.x + r.w / 2, cy = r.y + r.h / 2, col = 'rgba(255,255,255,0.75)';
@@ -1908,7 +2237,7 @@
 
     // How to play, only until the first game.
     const cy = H / 2;
-    if (!best && !bestSprint && !dailyRec.lastDay) {
+    if (!best && !records.sprint && !records.hardcore && !dailyRec.lastDay) {
       centered(tr('tagline_1'), cy - 245, 24, WHITE, 0.85);
       centered(tr('tagline_2'), cy - 212, 22, WHITE, 0.5);
     }
@@ -1916,7 +2245,7 @@
     // Play, with the picked mode and its record on a second line.
     const [r, lb, db, prev, next] = menuButtons(), p = 1 + Math.sin(time * 4) * 0.03;
     const grown = { x: r.x - r.w * (p - 1) / 2, y: r.y - r.h * (p - 1) / 2, w: r.w * p, h: r.h * p };
-    const modeName = tr(`mode_${menuMode}`), record = menuMode === 'classic' ? best : menuMode === 'sprint' ? bestSprint : 0;
+    const modeName = tr(`mode_${menuMode}`), record = menuMode === 'classic' ? best : records[menuMode] || 0;
     button2(grown, tr('play'), record > 0 ? tr('mode_best', modeName, record) : modeName, PALETTE[2], INK);
     drawChevron(prev, -1, modeFlash < 0 ? -modeFlash : 0);
     drawChevron(next, 1, modeFlash > 0 ? modeFlash : 0);
@@ -1930,6 +2259,7 @@
     drawSettingsIcon(settingsButton());
     drawTrophyIcon(lb);
     drawInfoIcon(infoButton());
+    drawMedalIcon(menuButtons()[5]);
   }
 
   // Curved arrow; dir 1 = clockwise, -1 = counter-clockwise (mirrored).
@@ -2015,15 +2345,15 @@
     ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
     centered(tr('leaderboard'), H * 0.1, 60, WHITE);
     boardTabs().forEach((r, i) => {
-      const on = BOARD_TABS[i] === boardTab, c = i === 2 ? PALETTE[4] : PALETTE[2];
-      button(r, tr(['tab_classic', 'tab_sprint', 'tab_today'][i]), on ? c : WHITE, on ? 1 : 0.1, on ? INK : WHITE);
+      const on = BOARD_TABS[i] === boardTab, c = BOARD_TABS[i] === 'today' ? PALETTE[4] : PALETTE[2];
+      button(r, tr(['tab_classic', 'tab_sprint', 'tab_hardcore', 'tab_today'][i]), on ? c : WHITE, on ? 1 : 0.1, on ? INK : WHITE);
     });
     const day = today();
     if (boardTab === 'today') {
       drawRemoteBoard(daily, `${tr('daily', dayNumber(day))}  ·  ${twistText(twistFor(day))[0]}`, tr('no_daily'));
       return;
     }
-    if (boardTab === 'sprint') { drawRemoteBoard(sprint, tr('top_sprint'), tr('no_sprint')); return; }
+    if (modeBoards[boardTab]) { drawRemoteBoard(modeBoards[boardTab], tr(`top_${boardTab}`), tr(`no_${boardTab}`)); return; }
     const local = board.status === 'local', global = board.status === 'global';
     centered(tr(local ? 'top_local' : global ? 'top_world' : 'top_online'),
       H * 0.1 + 124, 20, WHITE, 0.5);
@@ -2081,10 +2411,10 @@
   function drawAbout() {
     ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
     // The text scrolls above the fixed "tap to go back" line.
-    const bottom = H * 0.9 - 56;
+    const bottom = pageBottom();
     ctx.save();
     ctx.beginPath(); ctx.rect(0, 0, W, bottom); ctx.clip();
-    ctx.translate(0, -aboutScroll);
+    ctx.translate(0, -pageScroll);
     centered('COLOR SPIN', H * 0.1, 60, WHITE);
     centered(tr('version', VERSION), H * 0.1 + 40, 20, WHITE, 0.5);
     let y = H * 0.18;
@@ -2101,13 +2431,13 @@
     centered(SITE_LABEL, y, 24, PALETTE[1]);
     ctx.fillStyle = rgba(PALETTE[1]); ctx.fillRect((W - w) / 2, y + 5, w, 2);
     ctx.restore();
-    aboutMax = Math.max(0, y + 60 - bottom);
-    aboutScroll = Math.min(aboutScroll, aboutMax);
+    pageMax = Math.max(0, y + 60 - bottom);
+    pageScroll = Math.min(pageScroll, pageMax);
     // Tappable only while on screen.
-    const ly = y - aboutScroll;
+    const ly = y - pageScroll;
     linkRect = ly < bottom ? { x: (W - w) / 2 - 20, y: ly - 34, w: w + 40, h: Math.min(56, bottom - ly + 34) } : { x: 0, y: 0, w: 0, h: 0 };
     // More text below: fade the bottom edge.
-    if (aboutScroll < aboutMax - 1) {
+    if (pageScroll < pageMax - 1) {
       const g = ctx.createLinearGradient(0, bottom - 90, 0, bottom);
       g.addColorStop(0, rgba(BG_BOTTOM, 0)); g.addColorStop(1, rgba(BG_BOTTOM, 0.95));
       ctx.fillStyle = g; ctx.fillRect(0, bottom - 90, W, 90);
@@ -2123,9 +2453,15 @@
       [tr('music'), music.muted ? tr('off') : tr('on')],
       [tr('sounds'), sfx.muted ? tr('off') : tr('on')],
       [tr('language'), tr('lang_name')],
+      [tr('symbols'), symbolsOn ? tr('on') : tr('off')],
     ];
     values.forEach(([k, v], i) => button(rows[i], `${k}:  ${v}`, WHITE, 0.1, WHITE));
-    button(rows[3], tr('back'), PALETTE[2], 1, INK);
+    // A preview of the symbols next to their row.
+    if (symbolsOn) SYMBOLS.forEach((k, i) => {
+      const x = W / 2 - 3.5 * 40 + i * 40, y = rows[3].y + rows[3].h + 26;
+      circle(x, y, 15, rgba(PALETTE[i])); drawSymbol(k, x, y, 10, rgba(INK, 0.85));
+    });
+    button(rows[4], tr('back'), PALETTE[2], 1, INK);
   }
 
   function drawPlay() {
@@ -2209,12 +2545,13 @@
     const slide = (1 - t) * 40;
     if (mode === 'daily') centered(`${tr('daily', dayNumber(gameDay))}  ·  ${twistText(twist)[0]}`, H * 0.27 - 76 + slide, 24, PALETTE[4], t);
     if (mode === 'sprint') centered(tr('mode_sprint'), H * 0.27 - 76 + slide, 24, PALETTE[6], t);
+    if (mode === 'hardcore') centered(tr('mode_hardcore'), H * 0.27 - 76 + slide, 24, PALETTE[0], t);
     centered(tr(mode === 'sprint' ? 'time_up' : 'game_over'), H * 0.27 + slide, 68, PALETTE[0], t);
     centered(String(score), H * 0.41 + slide, 130, WHITE, t);
     centered(tr('points_level', level, bestStreak), H * 0.41 + 44 + slide, 22, WHITE, 0.55 * t);
     const daySide = mode === 'daily';
     if (newBest) centered(tr(daySide ? 'daily_new_best' : 'new_best'), H * 0.52 + slide, 34 + Math.sin(time * 6) * 3, PALETTE[2], t);
-    else centered(daySide ? tr('daily_best', todayBest()) : tr('best', mode === 'sprint' ? bestSprint : best), H * 0.52 + slide, 26, WHITE, 0.6 * t);
+    else centered(daySide ? tr('daily_best', todayBest()) : tr('best', records[mode] ?? best), H * 0.52 + slide, 26, WHITE, 0.6 * t);
     const rb = modeBoard();
     if (rb) { if (rb.me) centered(rankText(rb), H * 0.52 + 44 + slide, 22, WHITE, 0.7 * t); }
     else if (lastRank > 0) centered(tr('rank', lastRank), H * 0.52 + 44 + slide, 22, WHITE, 0.7 * t);
@@ -2239,12 +2576,25 @@
     else if (state === STATE.LEADERBOARD) drawLeaderboard();
     else if (state === STATE.ABOUT) drawAbout();
     else if (state === STATE.SETTINGS) drawSettings();
+    else if (state === STATE.AWARDS) drawAwards();
     else {
       drawPlay();
       if (state === STATE.PAUSED) drawPause();
       else if (state === STATE.GAME_OVER) drawGameOver();
     }
     if (toast) centered(toast.text, H * 0.95, 22, WHITE, clamp(toast.time / 0.4, 0, 1));
+    if (awardQueue.length && (state === STATE.PLAYING || state === STATE.GAME_OVER)) {
+      // A new award: a yellow pill sliding in under the top bar.
+      const a = awardQueue[0], k = clamp(Math.min(a.time, AWARD_TIME - a.time) / 0.25, 0, 1);
+      ctx.font = `800 24px ${FONT}`;
+      const w = ctx.measureText(a.text).width + 90, r = { x: (W - w) / 2, y: 118 - 30 * (1 - k), w, h: 56 };
+      ctx.globalAlpha = k;
+      roundRect(r, 28); ctx.fillStyle = rgba(PALETTE[2]); ctx.fill();
+      drawSymbol('star', r.x + 34, r.y + 28, 13, rgba(INK));
+      ctx.fillStyle = rgba(INK); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(a.text, r.x + w / 2 + 18, r.y + 29);
+      ctx.globalAlpha = 1;
+    }
     if (flash > 0) { ctx.fillStyle = `rgba(255,51,51,${0.22 * flash})`; ctx.fillRect(0, 0, W, H); }
     if (fade > 0) { ctx.fillStyle = rgba(BG_BOTTOM, fade); ctx.fillRect(0, 0, W, H); }
   }

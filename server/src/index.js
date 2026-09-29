@@ -6,13 +6,14 @@
 //   POST /v1/daily   { player, name, day, score, level, hits, duration }  -> { day, top, me, players }
 //   GET  /v1/sprint?player=<id>  -> { top, me, players }
 //   POST /v1/sprint  { player, name, score, level, hits, duration }  -> { top, me, players }
+//   /v1/hardcore: same as /v1/sprint
 //
 // `top` is the best TOP_SIZE players as [{ name, score, level, you? }] and `me`
 // is { rank, name, score, level } for the asking player, or null. Player ids
 // are never sent back: a player id is what allows writing to that row.
 // A POST keeps the player's best score and always updates their name.
 // /v1/daily is the same board for one day of the daily challenge, /v1/sprint
-// the one of the 60-second mode.
+// and /v1/hardcore the ones of those modes.
 
 const TOP_SIZE = 10;
 const NAME_MAX = 14;           // same as the name field in the game
@@ -50,10 +51,11 @@ function cleanName(name) {
   return [...s].slice(0, NAME_MAX).join('').trim();
 }
 
-// The boards: all-time and 60 seconds (one row per player), daily (one per day and player).
+// The boards: all-time, 60 seconds and hardcore (one row per player), daily (one per day and player).
 const BOARDS = {
   scores: { table: 'players', id: 'id', where: '', args: () => [] },
   sprint: { table: 'sprint', id: 'id', where: '', args: () => [] },
+  hardcore: { table: 'hardcore', id: 'id', where: '', args: () => [] },
   daily: { table: 'daily', id: 'player', where: 'day = ? AND', args: body => [body.day] },
 };
 
@@ -114,12 +116,13 @@ async function submit(db, kind, body) {
   } else {
     await db.prepare(`UPDATE ${table} SET name = ?, touched_at = ? WHERE ${where} ${id} = ?`).bind(name, now, ...key).run();
   }
-  // One name everywhere: a new name also shows on the 60-second and recent daily boards.
+  // One name everywhere: a new name also shows on the mode boards and the recent daily ones.
   if (kind === 'scores') {
     const since = new Date(now - 2 * DAY_MS).toISOString().slice(0, 10);
     await db.batch([
       db.prepare('UPDATE daily SET name = ? WHERE player = ? AND day >= ?').bind(name, player, since),
       db.prepare('UPDATE sprint SET name = ? WHERE id = ?').bind(name, player),
+      db.prepare('UPDATE hardcore SET name = ? WHERE id = ?').bind(name, player),
     ]);
   }
   return json(await board(db, kind, player, body));
@@ -129,7 +132,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
-    const kind = { '/v1/scores': 'scores', '/v1/daily': 'daily', '/v1/sprint': 'sprint' }[url.pathname];
+    const kind = { '/v1/scores': 'scores', '/v1/daily': 'daily', '/v1/sprint': 'sprint', '/v1/hardcore': 'hardcore' }[url.pathname];
     if (!kind) return fail(404, 'not found');
     try {
       if (request.method === 'GET') {
