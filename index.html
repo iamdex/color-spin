@@ -30,7 +30,7 @@
   body { margin: 0; font-family: Montserrat, system-ui, sans-serif; font-weight: 500; color: var(--text);
          background: radial-gradient(1200px 800px at 80% -10%, #231a4a 0%, transparent 60%), var(--bg);
          line-height: 1.55; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
-  img, video { max-width: 100%; display: block; }
+  img, video { max-width: 100%; height: auto; display: block; }
   a { color: inherit; }
   h1, h2, h3 { font-weight: 900; line-height: 1.08; margin: 0; letter-spacing: -0.01em; }
   h2 { font-size: clamp(2rem, 4.6vw, 3.4rem); }
@@ -56,7 +56,7 @@
   .nav-links a { text-decoration: none; color: var(--muted); transition: color 0.2s; }
   .nav-links a:hover { color: var(--text); }
   .lang { display: flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
-  .lang button { all: unset; cursor: pointer; font-weight: 800; font-size: 0.78rem; padding: 6px 11px; border-radius: 999px; color: var(--muted); }
+  .lang button { all: unset; cursor: pointer; font-weight: 800; font-size: 0.8rem; padding: 10px 13px; border-radius: 999px; color: var(--muted); }
   .lang button[aria-pressed="true"] { background: var(--text); color: var(--ink); }
   .lang button:focus-visible { outline: 2px solid var(--yellow); }
   @media (max-width: 860px) { .nav-links { display: none; } .lang { margin-left: auto; } }
@@ -75,7 +75,7 @@
            background: #000; border: 1px solid rgba(255,255,255,0.22); min-width: 190px; transition: transform 0.2s, border-color 0.2s; }
   .store:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.5); }
   .store svg { width: 28px; height: 28px; flex: none; }
-  .store small { display: block; font-size: 0.68rem; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; }
+  .store small { display: block; font-size: 0.75rem; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; }
   .store b { display: block; font-size: 1.12rem; font-weight: 800; line-height: 1.15; }
   .store.soon { cursor: default; opacity: 0.8; }
   .store.soon:hover { transform: none; border-color: rgba(255,255,255,0.22); }
@@ -197,7 +197,7 @@
   .trophy small { color: var(--muted); font-size: 0.78rem; font-weight: 600; }
   .trails { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
   .trail { display: flex; align-items: center; gap: 10px; padding: 10px 16px 10px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-weight: 800; font-size: 0.85rem; }
-  .trail canvas { width: 72px; height: 22px; }
+  .trail canvas { width: 60px; height: 20px; flex: none; }
 
   /* --- Accessibility --- */
   .symbols-img { width: min(420px, 100%); margin-inline: auto; border-radius: 50%; animation: float 8s ease-in-out infinite; filter: drop-shadow(0 30px 60px rgba(77,171,247,0.3)); }
@@ -210,7 +210,7 @@
   @media (max-width: 760px) { .boards { grid-template-columns: 1fr; } }
   .board { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; }
   .board h3 { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-  .live { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; color: var(--green); display: inline-flex; align-items: center; gap: 6px; }
+  .live { font-size: 0.75rem; font-weight: 800; letter-spacing: 0.1em; color: var(--green); display: inline-flex; align-items: center; gap: 6px; }
   .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: blink 1.4s infinite; }
   @keyframes blink { 50% { opacity: 0.25; } }
   .board ol { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 8px; }
@@ -233,9 +233,35 @@
   .final .stores { margin-top: 18px; }
   footer { border-top: 1px solid var(--line); padding: 34px 0 44px; color: var(--muted); font-weight: 600; font-size: 0.9rem; }
   footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 28px; justify-content: space-between; align-items: center; }
-  footer nav { display: flex; gap: 20px; }
-  footer a { text-decoration: none; }
+  footer nav { display: flex; gap: 8px; margin-inline: -10px; }
+  footer a { text-decoration: none; padding: 12px 10px; }
   footer a:hover { color: var(--text); }
+
+  /* --- Phones --- */
+  @media (max-width: 760px) {
+    /* The brand keeps just its icon; the store badges sit side by side. */
+    .brand span { display: none; }
+    .stores { justify-content: center; }
+    .store { min-width: 0; flex: 1 1 140px; max-width: 200px; padding: 9px 10px; gap: 8px; }
+    .store b { font-size: 0.92rem; white-space: nowrap; }
+    .store svg { width: 22px; height: 22px; }
+    .strip .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; }
+    .stat { flex-direction: column; align-items: center; gap: 0; text-align: center; font-size: 0.85rem; }
+    /* Rows of cards become carousels to swipe; the next card peeks in. */
+    .grid.g3, .grid.g4 { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 14px;
+                         margin-inline: -16px; padding: 6px 16px 22px; scroll-padding-inline: 16px; scrollbar-width: none; }
+    .grid.g3::-webkit-scrollbar, .grid.g4::-webkit-scrollbar { display: none; }
+    .grid.g3 > .card, .grid.g4 > .card { flex: 0 0 82%; scroll-snap-align: start; }
+    .grid .card.reveal { opacity: 1; transform: none; } /* off-screen sideways, so never "seen" */
+    .swipe { display: flex; justify-content: center; gap: 7px; margin-top: 2px; }
+    .swipe i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.22); transition: all 0.3s; }
+    .swipe i.on { width: 22px; border-radius: 4px; background: var(--yellow); }
+    .trails { display: grid; grid-template-columns: 1fr 1fr; }
+    .trail { padding: 9px 12px 9px 10px; }
+    .combo-steps b { font-size: 1.2rem; }
+    .share-badge { right: 4px; }
+  }
+  @media (min-width: 761px) { .swipe { display: none; } }
 
   /* --- Reveal on scroll --- */
   .reveal { opacity: 0; transform: translateY(34px); transition: opacity 0.8s cubic-bezier(.2,.7,.2,1), transform 0.8s cubic-bezier(.2,.7,.2,1); }
@@ -263,7 +289,7 @@
 
 <header class="nav" id="nav">
   <div class="wrap">
-    <a class="brand" href="#top"><img src="assets/icon-192.png" alt="" width="34" height="34">COLOR SPIN</a>
+    <a class="brand" href="#top" aria-label="Color Spin"><img src="assets/icon-192.png" alt="" width="34" height="34"><span>COLOR SPIN</span></a>
     <nav class="nav-links" aria-label="Sezioni">
       <a href="#how" data-i18n="nav_how">Come si gioca</a>
       <a href="#modes" data-i18n="nav_modes">Modalità</a>
@@ -741,6 +767,19 @@
       boards = { all: (await a.json()).top, daily: (await d.json()).top, failed: false };
     } catch { boards.failed = true; }
     renderBoards();
+  }
+
+  // --- Carousels (phones): dots that follow the swipe ---
+  for (const grid of document.querySelectorAll('.grid.g3, .grid.g4')) {
+    const cards = [...grid.children], dots = document.createElement('div');
+    dots.className = 'swipe'; dots.setAttribute('aria-hidden', 'true');
+    dots.innerHTML = cards.map(() => '<i></i>').join('');
+    grid.after(dots);
+    const mark = () => {
+      const i = Math.round(grid.scrollLeft / Math.max(1, cards[0].offsetWidth + 14));
+      [...dots.children].forEach((d, k) => d.classList.toggle('on', k === Math.min(i, cards.length - 1)));
+    };
+    grid.addEventListener('scroll', mark, { passive: true }); mark();
   }
 
   // --- Reveal on scroll, navigation background ---
