@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Color Spin — Privacy</title>
+<meta name="theme-color" content="#08080f">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;900&display=swap">
+<style>
+  :root { --bg: #08080f; --text: #f4f3ff; --muted: rgba(244,243,255,0.68); --line: rgba(255,255,255,0.1); --yellow: #ffd43b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: Montserrat, system-ui, sans-serif; font-weight: 500; line-height: 1.65; }
+  main { width: min(760px, 100% - 32px); margin: 0 auto; padding: 48px 0 80px; }
+  a { color: var(--yellow); }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 40px; }
+  .top a { color: var(--text); text-decoration: none; font-weight: 900; }
+  .lang { display: flex; gap: 6px; }
+  .lang button { all: unset; cursor: pointer; font-weight: 700; font-size: 0.8rem; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); }
+  .lang button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+  h1 { font-size: clamp(2rem, 6vw, 3rem); font-weight: 900; margin: 0 0 8px; }
+  h2 { font-size: 1.2rem; font-weight: 900; margin: 36px 0 8px; }
+  p, li { color: var(--muted); }
+  .date { color: var(--muted); font-size: 0.9rem; }
+  [lang="en"] { display: none; }
+  body.en [lang="it"] { display: none; }
+  body.en [lang="en"] { display: block; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <a href="./">← COLOR SPIN</a>
+    <div class="lang" role="group" aria-label="Lingua / Language">
+      <button type="button" data-lang="it" aria-pressed="true">IT</button>
+      <button type="button" data-lang="en" aria-pressed="false">EN</button>
+    </div>
+  </div>
+
+  <section lang="it">
+    <h1>Informativa sulla privacy</h1>
+    <p class="date">Ultimo aggiornamento: 29 settembre 2026</p>
+    <p>Color Spin è un gioco gratuito di Davide Dex Espertini. Raccoglie il minimo indispensabile per far funzionare le classifiche, senza pubblicità, senza profilazione e senza account.</p>
+    <h2>Cosa resta sul tuo dispositivo</h2>
+    <p>Record, impostazioni (musica, suoni, lingua, simboli), trofei, tema e scia scelti, il nome che scrivi per la classifica e un codice casuale che identifica il dispositivo in modo anonimo. Tutto è salvato nella memoria locale del browser o dell'app e non lascia il dispositivo, tranne quanto descritto sotto.</p>
+    <h2>Cosa arriva al server delle classifiche</h2>
+    <p>Quando fai un nuovo record, il gioco invia al server delle classifiche (scores.espertini.com, ospitato da Cloudflare): il codice anonimo del dispositivo, il nome che hai scelto, il punteggio, il livello, il numero di palline prese, la durata della partita e, per la sfida del giorno, la data. Questi dati servono solo a mostrare le classifiche e a scartare i punteggi impossibili. Il nome è visibile a tutti in classifica: non usare dati personali.</p>
+    <p>Come qualsiasi sito, il server riceve anche l'indirizzo IP per rispondere alla richiesta; il gioco non lo salva. La versione web carica i caratteri da Google Fonts, che riceve l'indirizzo IP del browser.</p>
+    <h2>Cosa non facciamo</h2>
+    <p>Nessuna pubblicità, nessun cookie di tracciamento, nessuna analisi del comportamento, nessuna vendita o cessione di dati a terzi.</p>
+    <h2>Cancellazione e contatti</h2>
+    <p>Puoi cancellare i dati locali svuotando i dati del sito o disinstallando l'app. Per far togliere il tuo nome e i tuoi punteggi dalle classifiche, o per qualsiasi domanda, scrivi tramite <a href="https://espertini.com">espertini.com</a>.</p>
+  </section>
+
+  <section lang="en">
+    <h1>Privacy policy</h1>
+    <p class="date">Last updated: September 29, 2026</p>
+    <p>Color Spin is a free game by Davide Dex Espertini. It collects only what the leaderboards need to work: no ads, no profiling and no accounts.</p>
+    <h2>What stays on your device</h2>
+    <p>Records, settings (music, sounds, language, symbols), awards, the chosen theme and trail, the name you type for the leaderboard and a random code that identifies the device anonymously. It is all kept in the browser's or the app's local storage and does not leave the device, except as described below.</p>
+    <h2>What reaches the leaderboard server</h2>
+    <p>When you set a new record, the game sends to the leaderboard server (scores.espertini.com, hosted by Cloudflare): the device's anonymous code, the name you chose, the score, the level, the number of balls caught, the length of the game and, for the daily challenge, the date. This data is used only to show the leaderboards and to reject impossible scores. Your name is visible to everyone on the leaderboard: don't use personal details.</p>
+    <p>Like any website, the server also receives your IP address to answer the request; the game does not store it. The web version loads its fonts from Google Fonts, which receives your browser's IP address.</p>
+    <h2>What we don't do</h2>
+    <p>No ads, no tracking cookies, no behavior analytics, no selling or sharing of data with third parties.</p>
+    <h2>Deletion and contact</h2>
+    <p>You can delete the local data by clearing the site's data or uninstalling the app. To have your name and scores removed from the leaderboards, or for any question, get in touch through <a href="https://espertini.com">espertini.com</a>.</p>
+  </section>
+</main>
+<script>
+  (() => {
+    const KEY = 'color-spin-lang';
+    let lang = (() => { try { return localStorage.getItem(KEY); } catch { return null; } })();
+    if (lang !== 'it' && lang !== 'en') lang = (navigator.language || '').toLowerCase().startsWith('it') ? 'it' : 'en';
+    const set = (l, save) => {
+      document.body.classList.toggle('en', l === 'en');
+      document.documentElement.lang = l;
+      document.title = l === 'en' ? 'Color Spin — Privacy policy' : 'Color Spin — Informativa sulla privacy';
+      for (const b of document.querySelectorAll('.lang button')) b.setAttribute('aria-pressed', String(b.dataset.lang === l));
+      if (save) { try { localStorage.setItem(KEY, l); } catch {} }
+    };
+    for (const b of document.querySelectorAll('.lang button')) b.addEventListener('click', () => set(b.dataset.lang, true));
+    set(lang, false);
+  })();
+</script>
+</body>
+</html>

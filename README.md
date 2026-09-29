@@ -3,7 +3,10 @@
 Spin the shape and match the color of the balls. A game by Davide Dex Espertini.
 
 - `web/index.html`: the game (JavaScript and canvas; graphics, sounds and music are generated in code).
-  It runs as a claude.ai artifact, on GitHub Pages (`web/build-pages.sh`) and inside the mobile app.
+  It runs as a claude.ai artifact, on GitHub Pages at https://iamdex.github.io/color-spin/play/ and inside the mobile app.
+- `site/`: the presentation site at https://iamdex.github.io/color-spin/ (with the privacy policy). The store links
+  are the `STORE_LINKS` placeholders at the top of the script in `site/index.html`.
+  `web/build-pages.sh <dir>` builds the Pages site: `site/` at the root and the game under `play/`.
 - `mobile/`: the Expo app for Android and iOS. It loads the web game in a full-screen WebView;
   `mobile/scripts/build-game.mjs` bundles `web/index.html` into it on `npm install` and `npm start`.
 - `server/`: the global leaderboard (https://scores.espertini.com), a Cloudflare Worker with a D1 database. Used by GitHub Pages

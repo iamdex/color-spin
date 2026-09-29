@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Color Spin — ruota, abbina, non fermarti più</title>
+<meta name="description" content="Color Spin è un gioco di riflessi a colori: ruota la figura e abbina ogni pallina al lato del suo colore. Combo, palline speciali, quattro modalità, una sfida nuova ogni giorno e classifica mondiale. Gratis.">
+<meta name="theme-color" content="#08080f">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Color Spin">
+<meta property="og:description" content="Ruota la figura, abbina i colori, non fermarti più. Gratis nel browser, presto su Android e iOS.">
+<meta property="og:image" content="https://iamdex.github.io/color-spin/assets/og-image.jpg">
+<meta property="og:url" content="https://iamdex.github.io/color-spin/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&display=swap">
+<style>
+  :root {
+    --bg: #08080f; --bg2: #120f24; --panel: rgba(255,255,255,0.045); --line: rgba(255,255,255,0.09);
+    --text: #f4f3ff; --muted: rgba(244,243,255,0.64); --ink: #12121c;
+    --red: #ff4d6d; --blue: #4dabf7; --yellow: #ffd43b; --green: #51cf66;
+    --purple: #b197fc; --orange: #ff922b; --cyan: #3bc9db; --pink: #f783ac;
+    --radius: 24px; --max: 1160px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; background: var(--bg); }
+  body { margin: 0; font-family: Montserrat, system-ui, sans-serif; font-weight: 500; color: var(--text);
+         background: radial-gradient(1200px 800px at 80% -10%, #231a4a 0%, transparent 60%), var(--bg);
+         line-height: 1.55; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+  img, video { max-width: 100%; display: block; }
+  a { color: inherit; }
+  h1, h2, h3 { font-weight: 900; line-height: 1.08; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: clamp(2rem, 4.6vw, 3.4rem); }
+  h3 { font-size: 1.25rem; font-weight: 800; }
+  p { margin: 0; }
+  .wrap { width: min(var(--max), 100% - 32px); margin-inline: auto; }
+  section { padding: clamp(72px, 11vw, 140px) 0; position: relative; }
+  .kicker { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 0.8rem;
+            letter-spacing: 0.16em; text-transform: uppercase; color: var(--yellow); margin-bottom: 18px; }
+  .kicker::before { content: ""; width: 26px; height: 3px; border-radius: 3px;
+                    background: linear-gradient(90deg, var(--red), var(--yellow), var(--green), var(--blue)); }
+  .lead { font-size: clamp(1.05rem, 1.6vw, 1.25rem); color: var(--muted); max-width: 40rem; margin-top: 18px; }
+  .center { text-align: center; }
+  .center .lead { margin-inline: auto; }
+
+  /* --- Navigation --- */
+  .nav { position: fixed; inset: 0 0 auto; z-index: 50; transition: background 0.3s, border-color 0.3s; border-bottom: 1px solid transparent; }
+  .nav.scrolled { background: rgba(8,8,15,0.78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-color: var(--line); }
+  .nav .wrap { display: flex; align-items: center; gap: 24px; height: 68px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; text-decoration: none; letter-spacing: 0.02em; }
+  .brand img { width: 34px; height: 34px; border-radius: 9px; }
+  .nav-links { display: flex; gap: 22px; margin-left: auto; font-weight: 700; font-size: 0.92rem; }
+  .nav-links a { text-decoration: none; color: var(--muted); transition: color 0.2s; }
+  .nav-links a:hover { color: var(--text); }
+  .lang { display: flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+  .lang button { all: unset; cursor: pointer; font-weight: 800; font-size: 0.78rem; padding: 6px 11px; border-radius: 999px; color: var(--muted); }
+  .lang button[aria-pressed="true"] { background: var(--text); color: var(--ink); }
+  .lang button:focus-visible { outline: 2px solid var(--yellow); }
+  @media (max-width: 860px) { .nav-links { display: none; } .lang { margin-left: auto; } }
+
+  /* --- Buttons and store badges --- */
+  .btn { display: inline-flex; align-items: center; gap: 12px; font-weight: 800; text-decoration: none; border-radius: 999px;
+         padding: 16px 28px; font-size: 1.05rem; transition: transform 0.2s, box-shadow 0.2s; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:focus-visible { outline: 3px solid var(--text); outline-offset: 3px; }
+  .btn-primary { background: var(--yellow); color: var(--ink); box-shadow: 0 10px 40px -8px rgba(255,212,59,0.55); }
+  .btn-primary:hover { box-shadow: 0 16px 50px -8px rgba(255,212,59,0.7); }
+  .btn-small { padding: 10px 18px; font-size: 0.9rem; }
+  .btn svg { width: 20px; height: 20px; }
+  .stores { display: flex; flex-wrap: wrap; gap: 12px; }
+  .store { display: inline-flex; align-items: center; gap: 12px; padding: 10px 20px 10px 16px; border-radius: 16px; text-decoration: none;
+           background: #000; border: 1px solid rgba(255,255,255,0.22); min-width: 190px; transition: transform 0.2s, border-color 0.2s; }
+  .store:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.5); }
+  .store svg { width: 28px; height: 28px; flex: none; }
+  .store small { display: block; font-size: 0.68rem; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; }
+  .store b { display: block; font-size: 1.12rem; font-weight: 800; line-height: 1.15; }
+  .store.soon { cursor: default; opacity: 0.8; }
+  .store.soon:hover { transform: none; border-color: rgba(255,255,255,0.22); }
+
+  /* --- Hero --- */
+  /* isolation: the hero's and the cards' negative z-index layers stay above the page background. */
+  .hero { min-height: 100svh; display: flex; align-items: center; padding: 110px 0 70px; overflow: hidden; isolation: isolate; }
+  .hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 40px; align-items: center; }
+  @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; text-align: center; } .hero .stores, .hero .ctas { justify-content: center; } .hero .lead { margin-inline: auto; } }
+  #sky { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+  .title { font-size: clamp(3.6rem, 11vw, 7.6rem); font-weight: 900; letter-spacing: -0.02em; line-height: 0.95; }
+  .title .word { display: block; }
+  .title .ch { display: inline-block; animation: bob 2.2s ease-in-out infinite; }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  .ctas { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 34px; align-items: center; }
+  .fine { margin-top: 18px; font-size: 0.88rem; color: var(--muted); font-weight: 600; }
+  .phone-stage { position: relative; display: grid; place-items: center; isolation: isolate; }
+  .phone { position: relative; width: min(320px, 76vw); aspect-ratio: 9 / 16; border-radius: 44px; padding: 10px;
+           background: linear-gradient(145deg, #2c2842, #121020); box-shadow: 0 40px 120px -20px rgba(177,151,252,0.45), 0 0 0 1px rgba(255,255,255,0.08) inset;
+           animation: float 6s ease-in-out infinite; }
+  .phone video { width: 100%; height: 100%; object-fit: cover; border-radius: 34px; background: #0d0b1c; }
+  .phone::after { content: ""; position: absolute; top: 20px; left: 50%; translate: -50% 0; width: 70px; height: 20px; border-radius: 20px; background: #0a0914; }
+  @keyframes float { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-14px) rotate(1deg); } }
+  .halo { position: absolute; width: 150%; aspect-ratio: 1; z-index: -1; border-radius: 50%;
+          background: conic-gradient(from 0deg, var(--red), var(--orange), var(--yellow), var(--green), var(--cyan), var(--blue), var(--purple), var(--pink), var(--red));
+          filter: blur(80px); opacity: 0.32; animation: spin 18s linear infinite; }
+  @keyframes spin { to { transform: rotate(1turn); } }
+  .scroll-cue { position: absolute; bottom: 22px; left: 50%; translate: -50% 0; width: 26px; height: 42px; border: 2px solid var(--line); border-radius: 16px; }
+  .scroll-cue::after { content: ""; position: absolute; left: 50%; top: 8px; width: 4px; height: 8px; margin-left: -2px; border-radius: 2px; background: var(--text); animation: cue 1.8s infinite; }
+  @keyframes cue { 0% { opacity: 0; transform: translateY(0); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(14px); } }
+
+  /* --- Strip --- */
+  .strip { border-block: 1px solid var(--line); padding: 26px 0; background: rgba(255,255,255,0.02); }
+  .strip .wrap { display: flex; flex-wrap: wrap; justify-content: space-around; gap: 20px 40px; }
+  .stat { display: flex; align-items: baseline; gap: 10px; font-weight: 700; color: var(--muted); }
+  .stat b { font-size: 2rem; font-weight: 900; color: var(--text); }
+
+  /* --- Cards --- */
+  .grid { display: grid; gap: 18px; margin-top: 48px; }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 980px) { .g4 { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 760px) { .g3, .g4 { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; position: relative; overflow: hidden; isolation: isolate;
+          transition: transform 0.3s, border-color 0.3s, background 0.3s; }
+  .card:hover { transform: translateY(-4px); border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); }
+  .card p { color: var(--muted); margin-top: 10px; }
+  .card .tag { display: inline-block; margin-top: 16px; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+               padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,0.07); color: var(--muted); }
+  .step-n { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; font-weight: 900; font-size: 1.4rem; color: var(--ink); margin-bottom: 20px; }
+  .card .accent { position: absolute; inset: auto -40% -60% auto; width: 220px; aspect-ratio: 1; border-radius: 50%; filter: blur(60px); opacity: 0.25; }
+
+  /* --- Split layouts --- */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(32px, 6vw, 80px); align-items: center; }
+  .split.rev > :first-child { order: 2; }
+  @media (max-width: 900px) { .split, .split.rev { grid-template-columns: 1fr; } .split.rev > :first-child { order: 0; } }
+  .bullets { list-style: none; padding: 0; margin: 26px 0 0; display: grid; gap: 14px; }
+  .bullets li { display: flex; gap: 14px; align-items: flex-start; color: var(--muted); }
+  .bullets li b { color: var(--text); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 7px; flex: none; }
+
+  /* --- Combo meter --- */
+  .combo { background: var(--panel); border: 1px solid var(--line); border-radius: 32px; padding: clamp(24px, 4vw, 44px); }
+  .combo-top { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+  .combo-count { font-size: clamp(3.4rem, 8vw, 5.6rem); font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+  .combo-label { color: var(--muted); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.82rem; }
+  .combo-mult { font-size: clamp(2.6rem, 6vw, 4rem); font-weight: 900; color: var(--yellow); transition: transform 0.25s; }
+  .combo-mult.pop { transform: scale(1.35); }
+  .combo-bar { height: 12px; border-radius: 12px; background: rgba(255,255,255,0.08); margin: 26px 0 18px; overflow: hidden; }
+  .combo-bar i { display: block; height: 100%; width: 0; border-radius: 12px; background: linear-gradient(90deg, var(--green), var(--yellow), var(--orange), var(--red)); }
+  .combo-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .combo-steps div { border-radius: 16px; padding: 12px; text-align: center; background: rgba(255,255,255,0.04); border: 1px solid var(--line); transition: all 0.3s; }
+  .combo-steps b { display: block; font-size: 1.5rem; font-weight: 900; }
+  .combo-steps small { color: var(--muted); font-weight: 700; }
+  .combo-steps .on { background: rgba(255,212,59,0.14); border-color: rgba(255,212,59,0.5); }
+  .combo-steps .on b { color: var(--yellow); }
+
+  /* --- Special balls --- */
+  .ball { width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; position: relative; margin-bottom: 22px; }
+  .ball::before { content: ""; position: absolute; inset: -12px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.55); animation: ring 1.6s ease-in-out infinite; }
+  .ball::after { content: ""; position: absolute; inset: -26px; border-radius: 50%; background: inherit; filter: blur(22px); opacity: 0.45; z-index: -1; }
+  @keyframes ring { 0%, 100% { transform: scale(1); opacity: 0.6; } 50% { transform: scale(1.1); opacity: 1; } }
+  .ball svg { width: 34px; height: 34px; }
+  .ball.jolly { background: conic-gradient(var(--red), var(--blue), var(--yellow), var(--green), var(--purple), var(--orange), var(--cyan), var(--pink), var(--red)); animation: spin 2s linear infinite; }
+  .ball.jolly::before { animation: ring 1.6s ease-in-out infinite reverse; }
+  .ball.jolly span { width: 18px; height: 18px; border-radius: 50%; background: #fff; }
+  .ball.cham { animation: cham 3s steps(1) infinite; }
+  @keyframes cham { 0% { background: var(--blue); } 33% { background: var(--green); } 66% { background: var(--orange); } }
+  .ball.cham svg { animation: spin 3s linear infinite; }
+
+  /* --- Modes --- */
+  .mode-card h3 { font-size: 1.5rem; }
+  .mode-icon { width: 58px; height: 58px; border-radius: 18px; display: grid; place-items: center; margin-bottom: 20px; }
+  .mode-icon svg { width: 30px; height: 30px; }
+
+  /* --- Daily --- */
+  .share-card { position: relative; width: min(440px, 100%); margin-inline: auto; }
+  .share-card img { border-radius: 26px; box-shadow: 0 40px 100px -30px rgba(177,151,252,0.6); transform: rotate(-3deg); animation: float 7s ease-in-out infinite; }
+  .share-badge { position: absolute; right: -8px; top: -14px; background: var(--purple); color: var(--ink); font-weight: 900; padding: 10px 16px; border-radius: 999px;
+                 box-shadow: 0 10px 30px -8px rgba(177,151,252,0.8); transform: rotate(6deg); font-size: 0.9rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+  .chip { padding: 9px 16px; border-radius: 999px; font-weight: 800; font-size: 0.85rem; background: rgba(255,255,255,0.06); border: 1px solid var(--line); }
+  .chip.today { background: var(--purple); color: var(--ink); border-color: transparent; }
+
+  /* --- Trophies --- */
+  .swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 14px; margin-top: 40px; }
+  @media (max-width: 760px) { .swatches { grid-template-columns: repeat(4, 1fr); } }
+  .swatch { text-align: center; font-weight: 800; font-size: 0.78rem; color: var(--muted); letter-spacing: 0.06em; }
+  .swatch i { display: block; aspect-ratio: 1; border-radius: 50%; margin: 0 auto 10px; width: 100%; max-width: 92px; border: 2px solid rgba(255,255,255,0.18);
+              position: relative; transition: transform 0.3s; }
+  .swatch:hover i { transform: scale(1.08) rotate(8deg); }
+  .swatch i::after { content: ""; position: absolute; inset: 38% 26%; background:
+      radial-gradient(circle at 16% 50%, var(--red) 0 18%, transparent 19%), radial-gradient(circle at 50% 50%, var(--yellow) 0 18%, transparent 19%), radial-gradient(circle at 84% 50%, var(--purple) 0 18%, transparent 19%); }
+  .trophies { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-top: 30px; }
+  .trophy { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 18px; background: var(--panel); border: 1px solid var(--line); }
+  .trophy .medal { width: 38px; height: 38px; border-radius: 50%; background: var(--yellow); display: grid; place-items: center; flex: none; }
+  .trophy .medal svg { width: 18px; height: 18px; }
+  .trophy b { display: block; font-size: 0.9rem; font-weight: 800; }
+  .trophy small { color: var(--muted); font-size: 0.78rem; font-weight: 600; }
+  .trails { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+  .trail { display: flex; align-items: center; gap: 10px; padding: 10px 16px 10px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-weight: 800; font-size: 0.85rem; }
+  .trail canvas { width: 72px; height: 22px; }
+
+  /* --- Accessibility --- */
+  .symbols-img { width: min(420px, 100%); margin-inline: auto; border-radius: 50%; animation: float 8s ease-in-out infinite; filter: drop-shadow(0 30px 60px rgba(77,171,247,0.3)); }
+  .sym-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+  .sym { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; }
+  .sym svg { width: 22px; height: 22px; }
+
+  /* --- Leaderboard --- */
+  .boards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 46px; }
+  @media (max-width: 760px) { .boards { grid-template-columns: 1fr; } }
+  .board { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; }
+  .board h3 { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .live { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; color: var(--green); display: inline-flex; align-items: center; gap: 6px; }
+  .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: blink 1.4s infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  .board ol { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 8px; }
+  .board li { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 14px; background: rgba(255,255,255,0.04); font-weight: 700; }
+  .board li .r { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); font-weight: 900; font-size: 0.85rem; flex: none; }
+  .board li .n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board li .s { font-weight: 900; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+  .board .empty { color: var(--muted); margin-top: 18px; }
+
+  /* --- Made in code --- */
+  .eq { display: flex; align-items: flex-end; gap: 6px; height: 90px; margin-top: 30px; }
+  .eq i { flex: 1; border-radius: 6px 6px 3px 3px; animation: eq 1.2s ease-in-out infinite; }
+  @keyframes eq { 0%, 100% { height: 20%; } 50% { height: 100%; } }
+
+  /* --- Final CTA --- */
+  .final { text-align: center; overflow: hidden; }
+  .final h2 { font-size: clamp(2.6rem, 7vw, 5rem); }
+  .final .ctas, .final .stores { justify-content: center; }
+  .final .lead { margin-inline: auto; }
+  .final .stores { margin-top: 18px; }
+  footer { border-top: 1px solid var(--line); padding: 34px 0 44px; color: var(--muted); font-weight: 600; font-size: 0.9rem; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 28px; justify-content: space-between; align-items: center; }
+  footer nav { display: flex; gap: 20px; }
+  footer a { text-decoration: none; }
+  footer a:hover { color: var(--text); }
+
+  /* --- Reveal on scroll --- */
+  .reveal { opacity: 0; transform: translateY(34px); transition: opacity 0.8s cubic-bezier(.2,.7,.2,1), transform 0.8s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in { opacity: 1; transform: none; }
+  .reveal.d1 { transition-delay: 0.08s; } .reveal.d2 { transition-delay: 0.16s; } .reveal.d3 { transition-delay: 0.24s; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .reveal { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path fill="#fff" d="M12 21s-7.5-4.6-9.6-9.1C.8 8.5 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.4.7-1.2 2.2-2.4 4.3-2.4 3.7 0 5.9 4 4.3 7.4C19.5 16.4 12 21 12 21z"/></symbol>
+    <symbol id="i-hourglass" viewBox="0 0 24 24"><path fill="#fff" d="M5 3h14l-7 9 7 9H5l7-9z"/></symbol>
+    <symbol id="i-dash" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="#fff" stroke-width="3" stroke-dasharray="4 4"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3 6.1 20.6l1.3-6.6L2.5 9.4l6.6-.8z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/></symbol>
+    <symbol id="i-gplay" viewBox="0 0 24 24"><path fill="#51cf66" d="M4 2.8l10.3 10.3L4 21.2c-.4-.2-.7-.7-.7-1.2V4c0-.5.3-1 .7-1.2z"/><path fill="#4dabf7" d="M17.6 9.8l-3.3 3.3L4 2.8c.2-.1.5-.1.8.1z"/><path fill="#ff4d6d" d="M17.6 16.4L4.8 23c-.3.2-.6.2-.8.1l10.3-10z"/><path fill="#ffd43b" d="M20.4 11.4c.8.5.8 1.7 0 2.2l-2.8 1.6-3.3-3.3 3.3-3.3z"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3" fill="none" stroke="#fff" stroke-width="2"/><circle cx="12" cy="18.5" r="1.2" fill="#fff"/></symbol>
+  </defs>
+</svg>
+
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="assets/icon-192.png" alt="" width="34" height="34">COLOR SPIN</a>
+    <nav class="nav-links" aria-label="Sezioni">
+      <a href="#how" data-i18n="nav_how">Come si gioca</a>
+      <a href="#modes" data-i18n="nav_modes">Modalità</a>
+      <a href="#daily" data-i18n="nav_daily">Sfida del giorno</a>
+      <a href="#trophies" data-i18n="nav_trophies">Trofei</a>
+      <a href="#ranks" data-i18n="nav_ranks">Classifica</a>
+    </nav>
+    <div class="lang" role="group" aria-label="Lingua / Language">
+      <button type="button" data-lang="it" aria-pressed="true">IT</button>
+      <button type="button" data-lang="en" aria-pressed="false">EN</button>
+    </div>
+    <a class="btn btn-primary btn-small" href="play/" data-i18n="play_short">Gioca</a>
+  </div>
+</header>
+
+<main id="top">
+  <!-- Hero -->
+  <section class="hero">
+    <canvas id="sky" aria-hidden="true"></canvas>
+    <div class="wrap hero-grid">
+      <div>
+        <span class="kicker reveal" data-i18n="hero_kicker">Il gioco di riflessi a colori</span>
+        <h1 class="title reveal d1" aria-label="Color Spin">
+          <span class="word" aria-hidden="true"><span class="ch" style="color:var(--red)">C</span><span class="ch" style="color:var(--blue);animation-delay:.15s">O</span><span class="ch" style="color:var(--yellow);animation-delay:.3s">L</span><span class="ch" style="color:var(--green);animation-delay:.45s">O</span><span class="ch" style="color:var(--purple);animation-delay:.6s">R</span></span>
+          <span class="word" aria-hidden="true">SPIN</span>
+        </h1>
+        <p class="lead reveal d2" data-i18n="hero_lead">Ruota la figura e abbina ogni pallina al lato del suo colore. Facile da imparare, impossibile da mollare.</p>
+        <div class="ctas reveal d3">
+          <a class="btn btn-primary" href="play/"><svg><use href="#i-play"/></svg><span data-i18n="play_now">Gioca ora nel browser</span></a>
+        </div>
+        <div class="stores reveal d3" style="margin-top:16px" data-stores></div>
+        <p class="fine reveal d3" data-i18n="hero_fine">Gratis · Nessuna registrazione · Italiano e inglese</p>
+      </div>
+      <div class="phone-stage reveal d2">
+        <div class="halo" aria-hidden="true"></div>
+        <div class="phone">
+          <video id="gameplay" autoplay muted loop playsinline preload="metadata" poster="assets/poster-it.jpg" aria-label="Video di una partita a Color Spin">
+            <source src="assets/gameplay-it.mp4" type="video/mp4">
+          </video>
+        </div>
+      </div>
+    </div>
+    <div class="scroll-cue" aria-hidden="true"></div>
+  </section>
+
+  <!-- Numbers -->
+  <div class="strip">
+    <div class="wrap">
+      <div class="stat"><b>8</b><span data-i18n="stat_colors">colori</span></div>
+      <div class="stat"><b>4</b><span data-i18n="stat_modes">modalità</span></div>
+      <div class="stat"><b>1</b><span data-i18n="stat_daily">sfida nuova ogni giorno</span></div>
+      <div class="stat"><b>11</b><span data-i18n="stat_trophies">trofei da vincere</span></div>
+    </div>
+  </div>
+
+  <!-- How to play -->
+  <section id="how">
+    <div class="wrap">
+      <div class="center">
+        <span class="kicker reveal" data-i18n="how_kicker">Come si gioca</span>
+        <h2 class="reveal d1" data-i18n="how_title">Un tocco. Un colore. Un altro ancora.</h2>
+        <p class="lead reveal d2" data-i18n="how_lead">Bastano dieci secondi per capirlo. Poi non smetti più.</p>
+      </div>
+      <div class="grid g3">
+        <article class="card reveal">
+          <div class="step-n" style="background:var(--blue)">1</div>
+          <h3 data-i18n="how1_t">Tocca a sinistra o a destra</h3>
+          <p data-i18n="how1_p">La figura ruota di un lato alla volta. Al computer usi le frecce, oppure A e D.</p>
+          <div class="accent" style="background:var(--blue)"></div>
+        </article>
+        <article class="card reveal d1">
+          <div class="step-n" style="background:var(--yellow)">2</div>
+          <h3 data-i18n="how2_t">Abbina i colori</h3>
+          <p data-i18n="how2_p">Ogni pallina deve toccare il lato del suo colore. Sbagli? Perdi una vita: ne hai cinque.</p>
+          <div class="accent" style="background:var(--yellow)"></div>
+        </article>
+        <article class="card reveal d2">
+          <div class="step-n" style="background:var(--green)">3</div>
+          <h3 data-i18n="how3_t">Guarda la figura crescere</h3>
+          <p data-i18n="how3_p">Ogni 10 palline sali di livello. Ogni 3 livelli la figura prende un lato e ti ridà una vita: dal triangolo fino all'ottagono.</p>
+          <div class="accent" style="background:var(--green)"></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Combo -->
+  <section>
+    <div class="wrap split">
+      <div>
+        <span class="kicker reveal" data-i18n="combo_kicker">Combo</span>
+        <h2 class="reveal d1" data-i18n="combo_title">Colpi di fila, punti moltiplicati.</h2>
+        <p class="lead reveal d2" data-i18n="combo_lead">Dieci palline giuste di fila e i punti raddoppiano. Venticinque e triplicano. Cinquanta e sei a x4. Basta un errore per ripartire da capo: è lì che il cuore batte forte.</p>
+      </div>
+      <div class="combo reveal d2" id="combo" aria-label="Contatore della combo">
+        <div class="combo-top">
+          <div><div class="combo-label" data-i18n="combo_label">Combo</div><div class="combo-count" id="comboCount">0</div></div>
+          <div class="combo-mult" id="comboMult">x1</div>
+        </div>
+        <div class="combo-bar"><i id="comboBar"></i></div>
+        <div class="combo-steps" id="comboSteps">
+          <div class="on"><b>x1</b><small>0</small></div>
+          <div><b>x2</b><small>10</small></div>
+          <div><b>x3</b><small>25</small></div>
+          <div><b>x4</b><small>50</small></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Special balls -->
+  <section>
+    <div class="wrap">
+      <div class="center">
+        <span class="kicker reveal" data-i18n="spec_kicker">Palline speciali</span>
+        <h2 class="reveal d1" data-i18n="spec_title">Ogni livello ha una sorpresa.</h2>
+        <p class="lead reveal d2" data-i18n="spec_lead">Man mano che sali arrivano palline speciali, riconoscibili dall'anello bianco che pulsa. Dopo l'ottagono il gioco continua a cambiare.</p>
+      </div>
+      <div class="grid g4">
+        <article class="card reveal">
+          <div class="ball" style="background:var(--red)"><svg><use href="#i-heart"/></svg></div>
+          <h3 data-i18n="spec1_t">Cuore</h3>
+          <p data-i18n="spec1_p">Prendilo sul suo colore e recuperi una vita.</p>
+          <span class="tag" data-i18n="spec1_tag">Dal livello 4</span>
+        </article>
+        <article class="card reveal d1">
+          <div class="ball jolly"><span></span></div>
+          <h3 data-i18n="spec2_t">Arcobaleno</h3>
+          <p data-i18n="spec2_p">Va bene su qualsiasi lato e vale il triplo dei punti.</p>
+          <span class="tag" data-i18n="spec2_tag">Dal livello 7</span>
+        </article>
+        <article class="card reveal d2">
+          <div class="ball" style="background:var(--cyan)"><svg><use href="#i-hourglass"/></svg></div>
+          <h3 data-i18n="spec3_t">Clessidra</h3>
+          <p data-i18n="spec3_p">Cinque secondi al rallentatore: anche la musica rallenta.</p>
+          <span class="tag" data-i18n="spec3_tag">Dal livello 10</span>
+        </article>
+        <article class="card reveal d3">
+          <div class="ball cham"><svg><use href="#i-dash"/></svg></div>
+          <h3 data-i18n="spec4_t">Camaleonte</h3>
+          <p data-i18n="spec4_p">Cambia colore quando ormai è vicino. Hai 0,7 secondi per rimediare.</p>
+          <span class="tag" data-i18n="spec4_tag">Dal livello 16</span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Modes -->
+  <section id="modes">
+    <div class="wrap">
+      <div class="center">
+        <span class="kicker reveal" data-i18n="modes_kicker">Quattro modalità</span>
+        <h2 class="reveal d1" data-i18n="modes_title">Rilassati o metti alla prova i riflessi.</h2>
+        <p class="lead reveal d2" data-i18n="modes_lead">Scegli come giocare con le frecce accanto al pulsante GIOCA.</p>
+      </div>
+      <div class="grid g4">
+        <article class="card mode-card reveal">
+          <div class="mode-icon" style="background:var(--yellow)"><svg viewBox="0 0 24 24"><path d="M12 3l8 5v8l-8 5-8-5V8z" fill="#12121c"/></svg></div>
+          <h3 data-i18n="m1_t">Classica</h3>
+          <p data-i18n="m1_p">Cinque vite e tutta la progressione, dal triangolo all'ottagono. Fin dove arrivi?</p>
+        </article>
+        <article class="card mode-card reveal d1">
+          <div class="mode-icon" style="background:var(--cyan)"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8" fill="none" stroke="#12121c" stroke-width="2.6"/><path d="M12 9v4l3 2M9 2h6" stroke="#12121c" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg></div>
+          <h3 data-i18n="m2_t">60 secondi</h3>
+          <p data-i18n="m2_p">Più punti che puoi in un minuto. Un errore costa 3 secondi, un cuore ne regala 5.</p>
+        </article>
+        <article class="card mode-card reveal d2">
+          <div class="mode-icon" style="background:var(--green)"><svg viewBox="0 0 24 24"><path d="M12 21c-5-2-8-6-8-11 3 0 6 1.5 8 4 2-2.5 5-4 8-4 0 5-3 9-8 11z" fill="#12121c"/></svg></div>
+          <h3 data-i18n="m3_t">Zen</h3>
+          <p data-i18n="m3_p">Niente vite e niente fretta. Solo colori, forme e musica, per staccare la testa.</p>
+        </article>
+        <article class="card mode-card reveal d3">
+          <div class="mode-icon" style="background:var(--red)"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="#12121c"/></svg></div>
+          <h3 data-i18n="m4_t">Hardcore</h3>
+          <p data-i18n="m4_p">Una vita sola, ritmo alto da subito e niente cuori. Solo per veri duri.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Daily challenge -->
+  <section id="daily">
+    <div class="wrap split">
+      <div>
+        <span class="kicker reveal" data-i18n="daily_kicker">Sfida del giorno</span>
+        <h2 class="reveal d1" data-i18n="daily_title">Ogni giorno una partita nuova. Uguale per tutti.</h2>
+        <p class="lead reveal d2" data-i18n="daily_lead">A mezzanotte arriva una sequenza di palline nuova, la stessa per tutti i giocatori del mondo, con una regola speciale. Non vince il più fortunato: vince chi gioca meglio.</p>
+        <ul class="bullets reveal d3">
+          <li><span class="dot" style="background:var(--purple)"></span><span data-i18n="daily_b1"><b>Tentativi illimitati:</b> in classifica conta il tuo migliore.</span></li>
+          <li><span class="dot" style="background:var(--yellow)"></span><span data-i18n="daily_b2"><b>Giorni di fila:</b> torna ogni giorno e tieni viva la serie.</span></li>
+          <li><span class="dot" style="background:var(--green)"></span><span data-i18n="daily_b3"><b>Condividi:</b> un'immagine pronta per WhatsApp e Instagram, con punteggio e posizione.</span></li>
+        </ul>
+        <div class="chips reveal d3" id="twists"></div>
+      </div>
+      <div class="share-card reveal d2">
+        <img id="cardImg" src="assets/card-it.jpg" alt="L'immagine da condividere dopo una sfida del giorno: 412 punti, terzo su 128" width="720" height="720" loading="lazy">
+        <span class="share-badge" data-i18n="daily_badge">Pronta da condividere</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Trophies -->
+  <section id="trophies">
+    <div class="wrap">
+      <div class="center">
+        <span class="kicker reveal" data-i18n="tr_kicker">Trofei, temi e scie</span>
+        <h2 class="reveal d1" data-i18n="tr_title">Più giochi, più si colora.</h2>
+        <p class="lead reveal d2" data-i18n="tr_lead">Undici trofei da conquistare. Ognuno sblocca un nuovo tema di sfondo o una scia per le palline, da scegliere quando vuoi.</p>
+      </div>
+      <div class="swatches reveal" id="swatches"></div>
+      <div class="split" style="margin-top:56px;align-items:start">
+        <div class="reveal">
+          <h3 data-i18n="tr_trails">Scie per le palline</h3>
+          <div class="trails" id="trails"></div>
+        </div>
+        <div class="reveal d1">
+          <h3 data-i18n="tr_list">Alcuni trofei</h3>
+          <div class="trophies" id="trophyList"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Accessibility -->
+  <section>
+    <div class="wrap split rev">
+      <div>
+        <span class="kicker reveal" data-i18n="acc_kicker">Per tutti</span>
+        <h2 class="reveal d1" data-i18n="acc_title">Pensato anche per chi non distingue i colori.</h2>
+        <p class="lead reveal d2" data-i18n="acc_lead">Attiva i simboli nelle impostazioni: ogni colore ha la sua forma, sulla figura e dentro le palline. Così abbini la forma, oltre al colore.</p>
+        <div class="sym-row reveal d3" id="symRow" aria-hidden="true"></div>
+      </div>
+      <img class="symbols-img reveal d2" src="assets/symbols.png" alt="L'ottagono di Color Spin con un simbolo su ogni lato" width="440" height="440" loading="lazy">
+    </div>
+  </section>
+
+  <!-- Leaderboard -->
+  <section id="ranks">
+    <div class="wrap">
+      <div class="center">
+        <span class="kicker reveal" data-i18n="rk_kicker">Classifica mondiale</span>
+        <h2 class="reveal d1" data-i18n="rk_title">Chi sta girando più forte?</h2>
+        <p class="lead reveal d2" data-i18n="rk_lead">Una classifica per ogni modalità e una per la sfida di oggi. Questi sono i migliori in questo momento.</p>
+      </div>
+      <div class="boards">
+        <div class="board reveal"><h3><span data-i18n="rk_all">Classica · di sempre</span><span class="live">LIVE</span></h3><div id="boardAll"></div></div>
+        <div class="board reveal d1"><h3><span id="dailyTitle" data-i18n="rk_today">Sfida di oggi</span><span class="live">LIVE</span></h3><div id="boardDaily"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Made in code -->
+  <section>
+    <div class="wrap split">
+      <div>
+        <span class="kicker reveal" data-i18n="code_kicker">Fatto a mano</span>
+        <h2 class="reveal d1" data-i18n="code_title">Ogni forma, ogni suono, ogni nota: tutto dal codice.</h2>
+        <p class="lead reveal d2" data-i18n="code_lead">Niente immagini e niente file audio. La grafica, gli effetti e la colonna sonora sono generati mentre giochi, e la musica aggiunge uno strumento a ogni nuova figura. Leggero, veloce, e funziona anche offline.</p>
+      </div>
+      <div class="reveal d2" aria-hidden="true">
+        <div class="eq" id="eq"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final call -->
+  <section class="final">
+    <div class="wrap">
+      <span class="kicker reveal" data-i18n="final_kicker">Pronto?</span>
+      <h2 class="reveal d1" data-i18n="final_title">Il primo giro è gratis. Anche tutti gli altri.</h2>
+      <p class="lead reveal d2" data-i18n="final_lead">Gioca subito nel browser, su telefono o computer. L'app per Android e iPhone arriva presto.</p>
+      <div class="ctas reveal d3">
+        <a class="btn btn-primary" href="play/"><svg><use href="#i-play"/></svg><span data-i18n="play_now">Gioca ora nel browser</span></a>
+      </div>
+      <div class="stores reveal d3" data-stores></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span data-i18n="foot_by">Un gioco di Davide Dex Espertini</span>
+    <nav aria-label="Link">
+      <a href="https://espertini.com" rel="noopener">espertini.com</a>
+      <a href="privacy.html" data-i18n="foot_privacy">Privacy</a>
+      <a href="https://github.com/iamdex/color-spin" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+(() => {
+  // ---------------------------------------------------------------------------
+  // Store links: fill these in once the app is published. While a link is
+  // empty its badge says "coming soon" and does nothing.
+  const STORE_LINKS = {
+    play: '',     // e.g. 'https://play.google.com/store/apps/details?id=com.espertini.colorspin'
+    appstore: '', // e.g. 'https://apps.apple.com/app/color-spin/id0000000000'
+  };
+  // ---------------------------------------------------------------------------
+
+  const API = 'https://scores.espertini.com/v1';
+  const LANG_KEY = 'color-spin-lang'; // shared with the game (same site)
+  const COLORS = ['#ff4d6d', '#4dabf7', '#ffd43b', '#51cf66', '#b197fc', '#ff922b', '#3bc9db', '#f783ac'];
+
+  // English texts; the Italian ones are the page itself.
+  const EN = {
+    nav_how: 'How to play', nav_modes: 'Modes', nav_daily: 'Daily challenge', nav_trophies: 'Awards', nav_ranks: 'Leaderboard',
+    play_short: 'Play', play_now: 'Play now in your browser',
+    hero_kicker: 'The color reflex game',
+    hero_lead: 'Spin the shape and match every ball to the side of its color. Easy to learn, impossible to put down.',
+    hero_fine: 'Free · No sign-up · English and Italian',
+    stat_colors: 'colors', stat_modes: 'modes', stat_daily: 'new challenge every day', stat_trophies: 'awards to win',
+    how_kicker: 'How to play', how_title: 'One tap. One color. One more.', how_lead: 'It takes ten seconds to get it. Then you can’t stop.',
+    how1_t: 'Tap left or right', how1_p: 'The shape turns one side at a time. On a computer use the arrow keys, or A and D.',
+    how2_t: 'Match the colors', how2_p: 'Every ball has to hit the side of its color. Miss one and you lose a life: you have five.',
+    how3_t: 'Watch the shape grow', how3_p: 'Every 10 balls you level up. Every 3 levels the shape gains a side and gives you a life back: from the triangle all the way to the octagon.',
+    combo_kicker: 'Combos', combo_title: 'Hits in a row, points multiplied.', combo_label: 'Combo',
+    combo_lead: 'Ten hits in a row and your points double. Twenty-five and they triple. Fifty and you’re at x4. One miss and you start over: that’s where your heart starts racing.',
+    spec_kicker: 'Special balls', spec_title: 'Every level has a surprise.',
+    spec_lead: 'As you climb, special balls show up, marked by a pulsing white ring. Past the octagon the game keeps changing.',
+    spec1_t: 'Heart', spec1_p: 'Catch it on its color and win back a life.', spec1_tag: 'From level 4',
+    spec2_t: 'Rainbow', spec2_p: 'Fits any side and is worth three times the points.', spec2_tag: 'From level 7',
+    spec3_t: 'Hourglass', spec3_p: 'Five seconds of slow motion: even the music slows down.', spec3_tag: 'From level 10',
+    spec4_t: 'Chameleon', spec4_p: 'Changes color when it’s almost there. You get 0.7 seconds to react.', spec4_tag: 'From level 16',
+    modes_kicker: 'Four modes', modes_title: 'Relax, or put your reflexes to the test.', modes_lead: 'Pick how to play with the arrows next to the PLAY button.',
+    m1_t: 'Classic', m1_p: 'Five lives and the whole journey, from the triangle to the octagon. How far can you go?',
+    m2_t: '60 seconds', m2_p: 'As many points as you can in one minute. A miss costs 3 seconds, a heart gives you 5.',
+    m3_t: 'Zen', m3_p: 'No lives and no rush. Just colors, shapes and music, to clear your head.',
+    m4_t: 'Hardcore', m4_p: 'One life, a fast pace from the start and no hearts. For the tough ones only.',
+    daily_kicker: 'Daily challenge', daily_title: 'A new game every day. The same for everyone.',
+    daily_lead: 'At midnight a new sequence of balls arrives, the same for every player in the world, with a special rule. Luck doesn’t win: the best player does.',
+    daily_b1: '<b>Unlimited tries:</b> your best one counts.',
+    daily_b2: '<b>Days in a row:</b> come back every day and keep your streak alive.',
+    daily_b3: '<b>Share:</b> a picture ready for WhatsApp and Instagram, with your score and rank.',
+    daily_badge: 'Ready to share',
+    tr_kicker: 'Awards, themes and trails', tr_title: 'The more you play, the more colorful it gets.',
+    tr_lead: 'Eleven awards to win. Each one unlocks a new background theme or a trail for the balls, to pick whenever you like.',
+    tr_trails: 'Ball trails', tr_list: 'Some of the awards',
+    acc_kicker: 'For everyone', acc_title: 'Made for colorblind players too.',
+    acc_lead: 'Turn on symbols in the settings: every color gets its own shape, on the figure and inside the balls. So you match the shape, not just the color.',
+    rk_kicker: 'World leaderboard', rk_title: 'Who’s spinning fastest?',
+    rk_lead: 'A leaderboard for each mode and one for today’s challenge. These are the best right now.',
+    rk_all: 'Classic · all time', rk_today: 'Today’s challenge',
+    code_kicker: 'Handmade', code_title: 'Every shape, every sound, every note: all from code.',
+    code_lead: 'No images and no audio files. The graphics, the effects and the soundtrack are generated as you play, and the music adds an instrument with every new shape. Light, fast, and it works offline too.',
+    final_kicker: 'Ready?', final_title: 'The first spin is free. So are all the others.',
+    final_lead: 'Play right now in your browser, on your phone or computer. The Android and iPhone app is coming soon.',
+    foot_by: 'A game by Davide Dex Espertini', foot_privacy: 'Privacy',
+  };
+  // Texts built by the script, in both languages.
+  const T = {
+    it: {
+      soon: 'Presto su', get: 'Scarica su', play_store: 'Google Play', app_store: 'App Store',
+      twists: ["Pioggia d'arcobaleno", 'Giorno dei camaleonti', 'Turbo', 'Tempo sospeso', 'Tre vite', 'Classica'],
+      today: 'Oggi', themes: ['Notte', 'Oceano', 'Foresta', 'Tramonto', 'Neon', 'Zen', 'Brace', 'Oro'],
+      trails: ['Classica', 'Cometa', 'Scintille', 'Stelle', 'Arcobaleno'],
+      trophies: [['Ottagono', 'Arriva al livello 16'], ['Combo x4', '50 palline giuste di fila'], ['Fulmine', '60 punti in 60 secondi'],
+                 ['Pace interiore', '100 palline in Zen'], ['Duro a morire', 'Livello 7 in Hardcore'], ['Settimana perfetta', 'La sfida 7 giorni di fila']],
+      level: 'liv.', player: 'Giocatore', loading: 'Caricamento…', offline: 'Classifica non raggiungibile in questo momento.',
+      empty_all: 'Ancora nessun punteggio: sii il primo!', empty_daily: 'Nessuno ha ancora giocato la sfida di oggi. Tocca a te!',
+      daily_title: n => `Sfida #${n} di oggi`, video: 'Video di una partita a Color Spin',
+      card_alt: "L'immagine da condividere dopo una sfida del giorno: 412 punti, terzo su 128",
+      sym_alt: "L'ottagono di Color Spin con un simbolo su ogni lato",
+      title: 'Color Spin — ruota, abbina, non fermarti più',
+    },
+    en: {
+      soon: 'Coming to', get: 'Get it on', play_store: 'Google Play', app_store: 'App Store',
+      twists: ['Rainbow rain', 'Chameleon day', 'Turbo', 'Frozen time', 'Three lives', 'Classic'],
+      today: 'Today', themes: ['Night', 'Ocean', 'Forest', 'Sunset', 'Neon', 'Zen', 'Ember', 'Gold'],
+      trails: ['Classic', 'Comet', 'Sparkle', 'Stars', 'Rainbow'],
+      trophies: [['Octagon', 'Reach level 16'], ['Combo x4', '50 hits in a row'], ['Lightning', '60 points in 60 seconds'],
+                 ['Inner peace', '100 balls in Zen'], ['Die hard', 'Level 7 in Hardcore'], ['Perfect week', 'The challenge 7 days in a row']],
+      level: 'lv.', player: 'Player', loading: 'Loading…', offline: 'The leaderboard can’t be reached right now.',
+      empty_all: 'No scores yet: be the first!', empty_daily: 'Nobody has played today’s challenge yet. Your turn!',
+      daily_title: n => `Today’s challenge #${n}`, video: 'Video of a Color Spin game',
+      card_alt: 'The picture to share after a daily challenge: 412 points, third of 128',
+      sym_alt: 'The Color Spin octagon with a symbol on each side',
+      title: 'Color Spin — spin, match, don’t stop',
+    },
+  };
+  const THEMES = [['#1c1638', '#08080f'], ['#0b2a4a', '#040a14'], ['#0f2e22', '#030a06'], ['#3d1733', '#0d0510'],
+                  ['#2a0b45', '#06020f'], ['#1c2e36', '#081014'], ['#3d130c', '#0c0402'], ['#33270d', '#0b0803']];
+
+  // --- Daily challenge (same rules as the game) ---
+  function today() {
+    try {
+      const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    } catch {}
+    return new Date().toISOString().slice(0, 10);
+  }
+  const dayNumber = day => Math.round((Date.parse(day) - Date.parse('2026-09-29')) / 86400000) + 1;
+  const todayTwist = () => ((dayNumber(today()) - 1) % 6 + 6) % 6;
+
+  // --- Language ---
+  let lang = (() => { try { return localStorage.getItem(LANG_KEY); } catch { return null; } })();
+  if (lang !== 'it' && lang !== 'en') lang = (navigator.language || '').toLowerCase().startsWith('it') ? 'it' : 'en';
+  const nodes = [...document.querySelectorAll('[data-i18n]')];
+  for (const el of nodes) el.dataset.it = el.innerHTML;
+  function setLang(l, save) {
+    lang = l;
+    if (save) { try { localStorage.setItem(LANG_KEY, l); } catch {} }
+    document.documentElement.lang = l;
+    document.title = T[l].title;
+    for (const el of nodes) el.innerHTML = l === 'en' && EN[el.dataset.i18n] ? EN[el.dataset.i18n] : el.dataset.it;
+    for (const b of document.querySelectorAll('.lang button')) b.setAttribute('aria-pressed', String(b.dataset.lang === l));
+    const v = document.getElementById('gameplay');
+    const src = `assets/gameplay-${l}.mp4`;
+    if (!v.currentSrc.endsWith(src)) { v.poster = `assets/poster-${l}.jpg`; v.querySelector('source').src = src; v.load(); v.play().catch(() => {}); }
+    v.setAttribute('aria-label', T[l].video);
+    const card = document.getElementById('cardImg');
+    card.src = `assets/card-${l}.jpg`; card.alt = T[l].card_alt;
+    document.querySelector('.symbols-img').alt = T[l].sym_alt;
+    renderStores(); renderTwists(); renderLooks(); renderBoards();
+  }
+  for (const b of document.querySelectorAll('.lang button')) b.addEventListener('click', () => setLang(b.dataset.lang, true));
+
+  // --- Store badges ---
+  function renderStores() {
+    const t = T[lang];
+    const badge = (key, icon, name) => {
+      const url = STORE_LINKS[key];
+      return `<a class="store${url ? '' : ' soon'}" ${url ? `href="${url}" rel="noopener"` : 'aria-disabled="true" role="link"'}>
+        <svg><use href="#${icon}"/></svg><span><small>${url ? t.get : t.soon}</small><b>${name}</b></span></a>`;
+    };
+    for (const el of document.querySelectorAll('[data-stores]'))
+      el.innerHTML = badge('play', 'i-gplay', t.play_store) + badge('appstore', 'i-phone', t.app_store);
+  }
+
+  // --- Daily rules, themes, trails, trophies, symbols ---
+  function renderTwists() {
+    const t = T[lang], cur = todayTwist();
+    document.getElementById('twists').innerHTML = t.twists.map((name, i) =>
+      `<span class="chip${i === cur ? ' today' : ''}">${i === cur ? `${t.today}: ` : ''}${name}</span>`).join('');
+  }
+  function renderLooks() {
+    const t = T[lang];
+    document.getElementById('swatches').innerHTML = THEMES.map(([a, b], i) =>
+      `<div class="swatch"><i style="background:linear-gradient(${a},${b})"></i>${t.themes[i]}</div>`).join('');
+    document.getElementById('trails').innerHTML = t.trails.map((name, i) =>
+      `<span class="trail"><canvas width="144" height="44" data-trail="${i}"></canvas>${name}</span>`).join('');
+    document.getElementById('trophyList').innerHTML = t.trophies.map(([name, desc]) =>
+      `<div class="trophy"><span class="medal"><svg style="color:#12121c"><use href="#i-star"/></svg></span><span><b>${name}</b><small>${desc}</small></span></div>`).join('');
+  }
+  // The eight color symbols, drawn like in the game.
+  const SYM = ['<circle cx="12" cy="12" r="6"/>', '<rect x="6.5" y="6.5" width="11" height="11"/>', '<path d="M12 4.5l8 13H4z"/>',
+    '<path d="M12 3.5l6.5 8.5-6.5 8.5-6.5-8.5z"/>', '<path d="M12 4v16M4 12h16" stroke="#12121c" stroke-width="4" stroke-linecap="round"/>',
+    '<path d="M6 6l12 12M18 6L6 18" stroke="#12121c" stroke-width="4" stroke-linecap="round"/>',
+    '<path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3 6.1 20.6l1.3-6.6L2.5 9.4l6.6-.8z"/>',
+    '<path d="M8.5 5v14M15.5 5v14" stroke="#12121c" stroke-width="3.6" stroke-linecap="round"/>'];
+  document.getElementById('symRow').innerHTML = SYM.map((s, i) =>
+    `<span class="sym" style="background:${COLORS[i]}"><svg viewBox="0 0 24 24" fill="#12121c">${s}</svg></span>`).join('');
+
+  // --- Leaderboards (the live server) ---
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  let boards = { all: null, daily: null, failed: false };
+  function renderBoards() {
+    const t = T[lang];
+    document.getElementById('dailyTitle').textContent = t.daily_title(dayNumber(today()));
+    const list = (rows, empty) => {
+      if (boards.failed) return `<p class="empty">${t.offline}</p>`;
+      if (!rows) return `<p class="empty">${t.loading}</p>`;
+      if (!rows.length) return `<p class="empty">${empty}</p>`;
+      return '<ol>' + rows.slice(0, 5).map((r, i) => `<li><span class="r" style="background:${COLORS[i]}">${i + 1}</span>
+        <span class="n">${esc(r.name || t.player)}</span><small style="color:var(--muted)">${t.level} ${r.level}</small><span class="s">${r.score}</span></li>`).join('') + '</ol>';
+    };
+    document.getElementById('boardAll').innerHTML = list(boards.all, t.empty_all);
+    document.getElementById('boardDaily').innerHTML = list(boards.daily, t.empty_daily);
+  }
+  async function loadBoards() {
+    try {
+      const [a, d] = await Promise.all([fetch(`${API}/scores`), fetch(`${API}/daily?day=${today()}`)]);
+      if (!a.ok || !d.ok) throw new Error('bad status');
+      boards = { all: (await a.json()).top, daily: (await d.json()).top, failed: false };
+    } catch { boards.failed = true; }
+    renderBoards();
+  }
+
+  // --- Reveal on scroll, navigation background ---
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+  }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+  const nav = document.getElementById('nav');
+  const onScroll = () => nav.classList.toggle('scrolled', scrollY > 20);
+  addEventListener('scroll', onScroll, { passive: true }); onScroll();
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // --- Combo meter: counts up to 50 while on screen, then starts over ---
+  (() => {
+    const count = document.getElementById('comboCount'), mult = document.getElementById('comboMult');
+    const bar = document.getElementById('comboBar'), steps = [...document.getElementById('comboSteps').children];
+    let n = 0, visible = false, last = 1;
+    new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(document.getElementById('combo'));
+    const show = () => {
+      const m = 1 + [10, 25, 50].filter(s => n >= s).length;
+      count.textContent = n; mult.textContent = `x${m}`; bar.style.width = `${Math.min(n / 50, 1) * 100}%`;
+      steps.forEach((s, i) => s.classList.toggle('on', i < m));
+      if (m !== last) { mult.classList.add('pop'); setTimeout(() => mult.classList.remove('pop'), 250); last = m; }
+    };
+    if (reduced) { n = 50; show(); return; }
+    setInterval(() => { if (!visible) return; n = n >= 58 ? 0 : n + 1; show(); }, 130);
+  })();
+
+  // --- The equalizer of the "made in code" section ---
+  document.getElementById('eq').innerHTML = Array.from({ length: 24 }, (_, i) =>
+    `<i style="background:${COLORS[i % 8]};animation-delay:${(-(i * 0.37) % 1.2).toFixed(2)}s;animation-duration:${(0.9 + (i % 5) * 0.15).toFixed(2)}s"></i>`).join('');
+
+  // --- Trail previews: a ball running across with each trail ---
+  function drawTrails(time) {
+    for (const c of document.querySelectorAll('canvas[data-trail]')) {
+      const x = c.getContext('2d'), kind = +c.dataset.trail, w = c.width, h = c.height;
+      x.clearRect(0, 0, w, h);
+      const head = ((time / 1400) % 1) * (w + 60) - 20, len = kind === 1 ? 16 : 9, col = COLORS[1];
+      for (let i = len; i >= 0; i--) {
+        const px = head - i * 7, t = 1 - i / (len + 1);
+        const c2 = kind === 4 ? COLORS[(i + Math.floor(time / 90)) % 8] : col;
+        x.globalAlpha = (kind === 1 ? 0.45 : 0.35) * t;
+        x.fillStyle = c2;
+        if (kind === 3) { if (i % 3 === 1) star(x, px, h / 2, 9 * t + 3); }
+        else { x.beginPath(); x.arc(px, h / 2, 12 * (0.3 + 0.6 * t), 0, Math.PI * 2); x.fill(); }
+        if (kind === 2 && (i + Math.floor(time / 60)) % 3 === 0) { x.globalAlpha = t; x.fillStyle = '#fff'; x.beginPath(); x.arc(px + (i * 5 % 9 - 4), h / 2 + (i * 7 % 13 - 6), 2.2, 0, Math.PI * 2); x.fill(); }
+      }
+      x.globalAlpha = 1; x.fillStyle = col; x.beginPath(); x.arc(head, h / 2, 12, 0, Math.PI * 2); x.fill();
+    }
+  }
+  function star(x, cx, cy, r) {
+    x.beginPath();
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; x.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); }
+    x.closePath(); x.fill();
+  }
+
+  // --- Hero sky: colored balls drifting toward a faint spinning shape ---
+  const sky = document.getElementById('sky'), sx = sky.getContext('2d');
+  let balls = [], W = 0, H = 0;
+  function resize() {
+    const dpr = Math.min(devicePixelRatio || 1, 2), r = sky.getBoundingClientRect();
+    W = r.width; H = r.height; sky.width = W * dpr; sky.height = H * dpr; sx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  new ResizeObserver(resize).observe(sky); resize();
+  function spawn() {
+    const a = Math.random() * Math.PI * 2, d = Math.max(W, H) * 0.7;
+    balls.push({ a, d, speed: 40 + Math.random() * 50, c: COLORS[Math.random() * 8 | 0], r: 5 + Math.random() * 7 });
+  }
+  for (let i = 0; i < 18; i++) { spawn(); balls[i].d *= Math.random(); }
+  let prev = performance.now(), heroVisible = true;
+  new IntersectionObserver(([e]) => { heroVisible = e.isIntersecting; }).observe(sky);
+  function frame(now) {
+    const dt = Math.min((now - prev) / 1000, 0.05); prev = now;
+    if (heroVisible && !reduced) {
+      sx.clearRect(0, 0, W, H);
+      const cx = W > 900 ? W * 0.72 : W / 2, cy = H * 0.5, R = Math.min(W, H) * 0.34;
+      // The shape: a slow octagon outline turning in steps, like the menu.
+      const rot = Math.floor(now / 900) * (Math.PI / 4) + Math.min((now % 900) / 160, 1) * (Math.PI / 4);
+      for (let i = 0; i < 8; i++) {
+        const a0 = rot + i * Math.PI / 4, a1 = a0 + Math.PI / 4;
+        sx.beginPath(); sx.moveTo(cx, cy); sx.lineTo(cx + Math.cos(a0) * R, cy + Math.sin(a0) * R); sx.lineTo(cx + Math.cos(a1) * R, cy + Math.sin(a1) * R); sx.closePath();
+        sx.fillStyle = COLORS[i] + '10'; sx.fill();
+      }
+      for (const b of balls) {
+        b.d -= b.speed * dt;
+        const x = cx + Math.cos(b.a) * b.d, y = cy + Math.sin(b.a) * b.d, fadeIn = Math.min(1, (Math.max(W, H) * 0.7 - b.d) / 120);
+        const alpha = 0.55 * fadeIn * Math.min(1, (b.d - R * 0.9) / 80);
+        if (alpha <= 0) continue;
+        sx.globalAlpha = alpha * 0.25; sx.fillStyle = b.c; sx.beginPath(); sx.arc(x, y, b.r * 2.4, 0, Math.PI * 2); sx.fill();
+        sx.globalAlpha = alpha; sx.beginPath(); sx.arc(x, y, b.r, 0, Math.PI * 2); sx.fill();
+      }
+      sx.globalAlpha = 1;
+      balls = balls.filter(b => b.d > R * 0.9);
+      while (balls.length < 18) spawn();
+    }
+    drawTrails(now);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  setLang(lang, false);
+  loadBoards();
+  setInterval(loadBoards, 60000);
+})();
+</script>
+</body>
+</html>
