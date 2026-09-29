@@ -1,0 +1,37 @@
+Spin the shape and send every ball to the side of its color. A tap on the left, a tap on the right: easy to learn, impossible to put down.
+
+HOW TO PLAY
+• Tap left or right to turn the shape by one side.
+• Every ball has to land on the side of its color. Miss one and you lose a life.
+• Every 10 balls you level up; every 3 levels the shape gains a side and gives you a life back: from the triangle all the way to the octagon.
+
+COMBOS
+Ten hits in a row and your points double, twenty-five and they triple, fifty and you're at x4. One miss and you start over.
+
+SPECIAL BALLS
+• Heart: one more life.
+• Rainbow: fits any side and is worth three times the points.
+• Hourglass: five seconds of slow motion.
+• Chameleon: changes color at the last moment.
+
+FOUR MODES
+• Classic: five lives and the whole journey.
+• 60 seconds: as many points as you can, a miss costs 3 seconds.
+• Zen: no lives and no rush, just colors and music.
+• Hardcore: one life and a fast pace from the start.
+
+THE DAILY CHALLENGE
+Every day a new sequence of balls, the same for every player, with a special rule. Unlimited tries, your best one counts. Keep your streak of days alive and share your result with a ready-made picture.
+
+AWARDS, THEMES AND TRAILS
+Eleven awards to win: each one unlocks a background theme or a trail for the balls.
+
+FOR EVERYONE
+Turn on symbols and every color gets its own shape, on the figure and inside the balls, so you can play even if you can't tell the colors apart.
+
+AND MORE
+• World leaderboards for every mode and for the daily challenge.
+• Graphics, sounds and music generated in code: the soundtrack adds an instrument with every new shape.
+• Works offline.
+• No ads, no accounts, no purchases.
+• In English and Italian.

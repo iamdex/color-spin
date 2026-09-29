@@ -1,5 +1,8 @@
 # Color Spin sugli store
 
+- [App Store (iOS)](#app-store-ios)
+- [Google Play (Android)](#google-play-android)
+
 ## App Store (iOS)
 
 Tutto il materiale è pronto:
@@ -60,3 +63,97 @@ completa è su https://color-spin.espertini.com/privacy.html.
   lo sviluppatore: assicurati che il sito abbia un contatto visibile.
 - **Note per la revisione**: sono già scritte in inglese in `store.config.json`, dove
   spiegano che il gioco non richiede account e funziona offline.
+
+## Google Play (Android)
+
+Tutto il materiale è in `store/google-play/it-IT` e `store/google-play/en-US`, nella
+struttura standard di Google Play (la stessa che usa `fastlane supply`):
+
+| File | Dove va in Play Console | Limite |
+|---|---|---|
+| `title.txt` | Nome dell'app | 30 caratteri |
+| `short_description.txt` | Descrizione breve | 80 caratteri |
+| `full_description.txt` | Descrizione completa | 4000 caratteri |
+| `images/icon.png` | Icona dell'app (512×512) | |
+| `images/featureGraphic.jpg` | Grafica in evidenza (1024×500) | |
+| `images/phoneScreenshots/1-6.jpg` | Screenshot del telefono (1080×1920) | da 2 a 8 |
+| `images/tenInchScreenshots/1-6.jpg` | Screenshot di tablet da 10" (1536×2048) | facoltativi |
+
+### Passaggi
+
+1. **Crea l'app** in Play Console: *Crea app*, nome "Color Spin", lingua predefinita
+   Italiano, tipo **Gioco**, **Senza costi**.
+2. **Scheda dello Store principale** (Aumenta il numero di utenti › Presenza nello store):
+   incolla i testi e carica le immagini di `it-IT`. Poi *Gestisci traduzioni* ›
+   Inglese (Stati Uniti), con i file di `en-US`.
+   - Categoria: **Giochi › Arcade**. Tag consigliati: Arcade, Casual, Rompicapo.
+   - Email di contatto: **è pubblica**, scegli quella che vuoi mostrare.
+   - Sito web: https://color-spin.espertini.com/
+3. **Contenuti dell'app** (Monitora e migliora › Norme › Contenuti dell'app), una sezione alla volta:
+   - Norme sulla privacy: https://color-spin.espertini.com/privacy.html
+   - Annunci: **No**, l'app non contiene annunci.
+   - Accesso all'app: **tutte le funzionalità sono disponibili senza restrizioni**.
+   - Classificazione dei contenuti: vedi sotto.
+   - Pubblico di destinazione: vedi sotto.
+   - Sicurezza dei dati: vedi sotto.
+   - App governative, funzionalità finanziarie, salute: **No**.
+4. **Build per lo store**: da `mobile/` lancia `npx eas-cli@latest build -p android --profile production`.
+   Produce un file `.aab`, firmato con la stessa chiave dell'APK di prova.
+5. **Test chiuso**: vedi la nota qui sotto. Il **primo** `.aab` va caricato **a mano**
+   (Test › Test chiuso › Crea release): Google non accetta il primo caricamento dagli strumenti
+   automatici. Dopo si può usare `npx eas-cli@latest submit -p android`, che però richiede
+   una chiave di un account di servizio di Google.
+6. **Produzione**: finito il test chiuso, chiedi l'accesso alla produzione e pubblica.
+
+### Il test chiuso: 12 tester per 14 giorni
+
+Per gli account sviluppatore personali creati dopo novembre 2023, Google chiede un **test
+chiuso con almeno 12 tester** che restino iscritti per **14 giorni di fila** prima di
+aprire la pubblicazione in produzione. Conviene partire subito:
+
+1. Test › Test chiuso › crea una traccia e aggiungi una lista di email (Account Google) dei tester.
+2. Carica il primo `.aab` (passaggio 4) e invia la release in revisione.
+3. Manda ai tester il link di adesione: devono accettare e installare l'app dal Play Store.
+
+Il conteggio dei 14 giorni parte da quando i 12 tester sono iscritti. Se il tuo account è
+di un'organizzazione (partita IVA), il requisito non si applica.
+
+### Sicurezza dei dati: le risposte
+
+- L'app raccoglie o condivide dati utente? **Sì, li raccoglie** (non li condivide con terze parti).
+- I dati sono crittografati in transito? **Sì** (HTTPS).
+- Gli utenti possono chiedere l'eliminazione dei dati? **Sì**, tramite il contatto su espertini.com
+  (è scritto nella pagina privacy).
+- Tipi di dati, tutti **raccolti**, **non condivisi**, **non effimeri**, uso: **Funzionalità dell'app**:
+
+| Categoria | Tipo | Cosa è |
+|---|---|---|
+| Attività nell'app | Altri contenuti generati dagli utenti | Il nome scelto per la classifica |
+| Attività nell'app | Altre azioni | Punteggi, livello e durata delle partite da record |
+| ID dispositivo o altri ID | ID dispositivo o altri ID | Il codice casuale e anonimo usato per la classifica |
+
+Per ognuno: la raccolta è **obbligatoria** (avviene da sola quando fai un record).
+
+### Classificazione dei contenuti (questionario IARC)
+
+Categoria **Gioco**. A tutte le domande su violenza, paura, sesso, linguaggio, droghe e gioco
+d'azzardo rispondi **No**. Alle domande sull'interazione tra utenti:
+- Gli utenti possono comunicare o scambiarsi contenuti? **Sì**: i nomi in classifica sono visibili a tutti.
+- Condivide la posizione dell'utente? **No**. Acquisti digitali? **No**.
+
+Il risultato atteso è una classificazione per tutti (PEGI 3 / Everyone), con la nota
+"Interazione tra utenti".
+
+### Pubblico di destinazione
+
+Consiglio **13 anni in su** (13-15, 16-17, 18+). Se includi i minori di 13 anni si applicano
+le norme per le famiglie di Google, molto più severe sui contenuti scritti dagli utenti come
+i nomi in classifica. Il gioco resta adatto a tutti: la classificazione dei contenuti lo dice comunque.
+
+### Da sapere
+
+- **Il filtro per i nomi** in classifica, consigliato per Apple, aiuta anche qui: Google chiede
+  di moderare i contenuti generati dagli utenti.
+- Quando l'app è pubblicata, il link è
+  `https://play.google.com/store/apps/details?id=com.espertini.colorspin`: va messo in
+  `STORE_LINKS.play` in `site/index.html`.

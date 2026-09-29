@@ -1,0 +1,37 @@
+Ruota la figura e fai toccare a ogni pallina il lato del suo colore. Un tocco a sinistra, un tocco a destra: facile da imparare, impossibile da mollare.
+
+COME SI GIOCA
+• Tocca a sinistra o a destra per ruotare la figura di un lato.
+• Ogni pallina deve arrivare sul lato del suo colore. Sbagli? Perdi una vita.
+• Ogni 10 palline sali di livello; ogni 3 livelli la figura prende un lato e ti ridà una vita: dal triangolo fino all'ottagono.
+
+COMBO
+Dieci palline giuste di fila e i punti raddoppiano, venticinque e triplicano, cinquanta e sei a x4. Basta un errore per ripartire da capo.
+
+PALLINE SPECIALI
+• Cuore: una vita in più.
+• Arcobaleno: va bene su ogni lato e vale il triplo.
+• Clessidra: cinque secondi al rallentatore.
+• Camaleonte: cambia colore all'ultimo momento.
+
+QUATTRO MODALITÀ
+• Classica: cinque vite e tutta la progressione.
+• 60 secondi: più punti che puoi, un errore costa 3 secondi.
+• Zen: niente vite e niente fretta, solo colori e musica.
+• Hardcore: una vita sola e ritmo alto da subito.
+
+LA SFIDA DEL GIORNO
+Ogni giorno una sequenza di palline nuova, uguale per tutti i giocatori, con una regola speciale. Tentativi illimitati, in classifica conta il migliore. Tieni viva la serie di giorni di fila e condividi il risultato con un'immagine pronta.
+
+TROFEI, TEMI E SCIE
+Undici trofei da conquistare: ognuno sblocca un tema di sfondo o una scia per le palline.
+
+PER TUTTI
+Con i simboli attivi ogni colore ha la sua forma, sulla figura e dentro le palline: si gioca anche se non si distinguono i colori.
+
+E ANCORA
+• Classifiche mondiali per ogni modalità e per la sfida del giorno.
+• Grafica, suoni e musica generati dal codice: la colonna sonora aggiunge uno strumento a ogni nuova figura.
+• Funziona anche offline.
+• Nessuna pubblicità, nessun account, nessun acquisto.
+• In italiano e in inglese.
