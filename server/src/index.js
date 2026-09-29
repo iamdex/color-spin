@@ -1,7 +1,7 @@
 // Color Spin global leaderboard: a Cloudflare Worker on a D1 database.
 //
 //   GET  /v1/scores?player=<id>  -> { top, me }
-//   POST /v1/scores  { player, name, score, level, duration }  -> { top, me }
+//   POST /v1/scores  { player, name, score, level, hits, duration }  -> { top, me }
 //
 // `top` is the best TOP_SIZE players as [{ name, score, level, you? }] and `me`
 // is { rank, name, score, level } for the asking player, or null. Player ids
@@ -10,9 +10,11 @@
 
 const TOP_SIZE = 10;
 const NAME_MAX = 14;           // same as the name field in the game
-const POINTS_PER_LEVEL = 10;   // same rule as the game: a level every 10 points
+const POINTS_PER_LEVEL = 10;   // same rule as the game: a level every 10 balls hit
+// Since 1.3 a hit is worth up to x4 (combo), and x3 more for a rainbow ball.
+const MAX_POINTS_PER_HIT = 4 * 3;
 const MAX_SCORE = 100000;
-// At most one ball every 0.5 s reaches the shape, so a game can't score faster
+// At most one ball every 0.5 s reaches the shape, so a game can't hit faster
 // than this (a little slack for rounding and the first ball).
 const MAX_POINTS_PER_SECOND = 2;
 const MIN_WRITE_GAP = 2000;    // ms between writes from the same player
@@ -58,10 +60,15 @@ async function board(db, player) {
 
 async function submit(db, body) {
   const { player, score, level, duration } = body;
+  // Up to 1.2 every hit was one point, and those apps don't send hits.
+  const hits = body.hits ?? score;
   if (!validPlayer(player)) return fail(400, 'bad player');
   if (!Number.isInteger(score) || score < 0 || score > MAX_SCORE) return fail(400, 'bad score');
-  if (level !== 1 + Math.floor(score / POINTS_PER_LEVEL)) return fail(400, 'bad level');
-  if (typeof duration !== 'number' || !(duration >= 0) || score > duration * MAX_POINTS_PER_SECOND + 3) {
+  if (!Number.isInteger(hits) || hits < 0 || hits > score || score > hits * MAX_POINTS_PER_HIT) {
+    return fail(400, 'bad hits');
+  }
+  if (level !== 1 + Math.floor(hits / POINTS_PER_LEVEL)) return fail(400, 'bad level');
+  if (typeof duration !== 'number' || !(duration >= 0) || hits > duration * MAX_POINTS_PER_SECOND + 3) {
     return fail(400, 'too fast');
   }
   const name = cleanName(body.name), now = Date.now();
