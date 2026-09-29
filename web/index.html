@@ -46,7 +46,7 @@
   const FONT = 'Montserrat, "Arial Black", Arial, sans-serif';
   const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6 };
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
-  const VERSION = '1.4';
+  const VERSION = '1.5';
   // Hits in a row for x2, x3 and x4. A miss starts the count again.
   const COMBO_STEPS = [10, 25, 50];
   const JOLLY_POINTS = 3, SLOW_TIME = 5, SLOW_FACTOR = 0.5;
@@ -65,6 +65,10 @@
     { id: 'classic' },
   ];
   const NO_TWIST = { id: 'none' };
+  // Modes picked on the menu. 60 seconds: a miss costs time, a heart gives some.
+  // Zen: no lives and no end, at an easy pace.
+  const MODES = ['classic', 'sprint', 'zen'], MODE_KEY = 'color-spin-mode', SPRINT_BEST_KEY = 'color-spin-best-sprint';
+  const SPRINT_TIME = 60, SPRINT_MISS = 3, SPRINT_HEART = 5, SPRINT_BOOST = 2, ZEN_PACE = 3;
   const SITE_URL = 'https://espertini.com', SITE_LABEL = 'espertini.com', LANG_KEY = 'color-spin-lang';
   // All the game's texts. The texts of the online leaderboard are used only on claude.ai.
   const TEXT = {
@@ -90,9 +94,21 @@
       "daily_rank": "%d° OGGI",
       "daily_rank_of": "%d° OGGI SU %d",
       "share": "CONDIVIDI",
+      "mode_classic": "CLASSICA",
+      "mode_sprint": "60 SECONDI",
+      "mode_zen": "ZEN",
+      "mode_info_sprint": "Più punti che puoi: un errore costa 3 secondi",
+      "mode_info_zen": "Niente vite, niente fretta: solo colori e musica",
+      "time_up": "TEMPO SCADUTO!",
+      "banner_time": "+%d secondi",
+      "rank_of": "%d° SU %d",
+      "tab_classic": "CLASSICA",
+      "tab_sprint": "60 SEC",
+      "top_sprint": "I migliori in 60 secondi",
+      "no_sprint": "Ancora nessuna partita da 60 secondi",
+      "share_sprint": "Color Spin · 60 secondi: %d punti! Riesci a battermi?",
       "saved": "Immagine salvata",
       "share_failed": "Condivisione non riuscita",
-      "tab_all": "SEMPRE",
       "tab_today": "OGGI",
       "no_daily": "Nessuno ha ancora giocato la sfida di oggi",
       "offline": "Classifica non raggiungibile",
@@ -164,6 +180,13 @@
           ]
         ],
         [
+          "MODALITÀ",
+          [
+            "60 secondi: un errore costa 3 secondi,",
+            "un cuore ne regala 5. Zen: niente vite."
+          ]
+        ],
+        [
           "COMANDI",
           [
             "Tocca a sinistra o a destra per ruotare",
@@ -211,9 +234,21 @@
       "daily_rank": "#%d TODAY",
       "daily_rank_of": "#%d TODAY OF %d",
       "share": "SHARE",
+      "mode_classic": "CLASSIC",
+      "mode_sprint": "60 SECONDS",
+      "mode_zen": "ZEN",
+      "mode_info_sprint": "As many points as you can: a miss costs 3 seconds",
+      "mode_info_zen": "No lives, no rush: just colors and music",
+      "time_up": "TIME'S UP!",
+      "banner_time": "+%d seconds",
+      "rank_of": "#%d OF %d",
+      "tab_classic": "CLASSIC",
+      "tab_sprint": "60 SEC",
+      "top_sprint": "Best in 60 seconds",
+      "no_sprint": "No 60-second games yet",
+      "share_sprint": "Color Spin · 60 seconds: %d points! Can you beat me?",
       "saved": "Image saved",
       "share_failed": "Could not share",
-      "tab_all": "ALL TIME",
       "tab_today": "TODAY",
       "no_daily": "Nobody has played today's challenge yet",
       "offline": "Leaderboard unreachable",
@@ -282,6 +317,13 @@
           [
             "Every day the same balls for everyone,",
             "with a special rule. Share your score!"
+          ]
+        ],
+        [
+          "MODES",
+          [
+            "60 seconds: a miss costs 3 seconds,",
+            "a heart gives 5 more. Zen: no lives."
           ]
         ],
         [
@@ -459,6 +501,7 @@
       this.buffers.combo = buf(arp([783.99, 1046.5, 1318.51, 1567.98], 0.05, 0.25, 0.08, 0.26, 0.3));
       this.buffers.power = buf(arp([1046.5, 1567.98, 2093], 0.04, 0.3, 0.1, 0.22, 0.2));
       this.buffers.switch = buf(blip(700, 1200, 0.08, 0.03, 0.22));
+      this.buffers.soft = buf(blip(330, 220, 0.18, 0.07, 0.22)); // a miss in Zen
       this.buffers.figure = buf(arp([523.25, 659.25, 783.99, 1046.5, 1318.51], 0.07, 0.35, 0.12, 0.28, 0.3));
       this.buffers.game_over = buf(arp([392, 311.13, 261.63, 196], 0.16, 0.4, 0.18, 0.35, 0.5));
       this.chimes = PENTA.map(f => buf(blip(f, f, 0.35, 0.12, 0.35, 0.3)));
@@ -767,7 +810,11 @@
   async function initBoard() {
     const cl = window.claude;
     const [db, user] = cl && cl.use ? await Promise.all([cl.use('db'), cl.use('user')]) : [null, null];
-    if (!db) { useLocalBoard(); refreshGlobal(); syncGlobal(); refreshDaily(); syncDaily(); return; }
+    if (!db) {
+      useLocalBoard(); refreshGlobal(); syncGlobal();
+      for (const rb of [daily, sprint]) { refreshRemote(rb); syncRemote(rb); }
+      return;
+    }
     board.db = db; board.user = user;
     board.myId = user ? await user.id() : null;
     if (board.myId) {
@@ -781,38 +828,40 @@
       board.status = 'ready';
       refreshNames();
     }, () => { if (board.status === 'loading') useLocalBoard(); });
-    initClaudeDaily();
+    initClaudeBoard(daily); initClaudeBoard(sprint);
   }
   async function refreshNames(rows = board.rows) {
     if (!board.user || !rows.length) return;
     const ps = await board.user.profiles(rows.map(r => r.id));
     for (const id in ps) board.names[id] = ps[id].name;
   }
-  // The daily board on claude.ai: one document per player, daily/<user id> =
-  // {day, score, level, at}, holding their best game of that day.
-  async function initClaudeDaily() {
-    const day = today();
-    Object.assign(daily, { source: 'claude', day, status: 'loading' });
+  // The daily and 60-second boards on claude.ai: one document per player,
+  // daily/<user id> = {day, score, level, at} (their best of that day) and
+  // sprint/<user id> = {score, level, at}.
+  async function initClaudeBoard(rb) {
+    const day = today(), isDaily = rb === daily;
+    Object.assign(rb, { source: 'claude', day, status: 'loading' });
     if (board.myId) {
       try {
-        const snap = await board.db.doc(`daily/${board.myId}`).get();
-        if (snap.exists && snap.data().day === day) daily.myBest = Number(snap.data().score) || 0;
+        const snap = await board.db.doc(`${rb.kind}/${board.myId}`).get();
+        if (snap.exists && (!isDaily || snap.data().day === day)) rb.myBest = Number(snap.data().score) || 0;
       } catch {}
     }
-    board.db.collection('daily').where('day', '==', day).orderBy('score', 'desc').limit(TOP_SIZE).onSnapshot(snap => {
-      daily.rows = snap.docs.map(d => ({ id: d.id, score: Number(d.data().score) || 0, level: Number(d.data().level) || 1, mine: d.id === board.myId }));
-      const i = daily.rows.findIndex(r => r.mine);
-      daily.me = i >= 0 ? { rank: i + 1 } : null;
-      daily.status = 'ok';
-      refreshNames(daily.rows);
-    }, () => { daily.status = 'offline'; });
+    let q = board.db.collection(rb.kind);
+    if (isDaily) q = q.where('day', '==', day);
+    q.orderBy('score', 'desc').limit(TOP_SIZE).onSnapshot(snap => {
+      rb.rows = snap.docs.map(d => ({ id: d.id, score: Number(d.data().score) || 0, level: Number(d.data().level) || 1, mine: d.id === board.myId }));
+      const i = rb.rows.findIndex(r => r.mine);
+      rb.me = i >= 0 ? { rank: i + 1 } : null;
+      rb.status = 'ok';
+      refreshNames(rb.rows);
+    }, () => { rb.status = 'offline'; });
   }
-  function submitClaudeDaily(s, lvl) {
-    if (!board.myId || s <= daily.myBest) return;
-    daily.myBest = s;
-    board.writing = board.writing.then(() =>
-      board.db.doc(`daily/${board.myId}`).set({ day: gameDay, score: s, level: lvl, at: Date.now() })
-    ).catch(() => {});
+  function submitClaudeBoard(rb, s, lvl) {
+    if (!board.myId || s <= rb.myBest) return;
+    rb.myBest = s;
+    const doc = { ...(rb === daily ? { day: gameDay } : {}), score: s, level: lvl, at: Date.now() };
+    board.writing = board.writing.then(() => board.db.doc(`${rb.kind}/${board.myId}`).set(doc)).catch(() => {});
   }
   function submitScore(s, lvl) {
     if (!board.db || !board.myId || s <= board.myBest) return;
@@ -952,62 +1001,72 @@
     return improved;
   }
 
-  // The day's board: from the artifact's db on claude.ai, from server/ elsewhere.
-  const DAILY_URL = 'https://scores.espertini.com/v1/daily', PENDING_DAILY_KEY = 'color-spin-pending-daily';
-  const daily = {
-    source: 'server', status: 'idle', // idle | loading | ok | offline
-    day: '', rows: [], me: null, players: 0, myBest: 0,
-    pending: (() => { try { return JSON.parse(localStorage.getItem(PENDING_DAILY_KEY)); } catch { return null; } })(),
-    lastGame: null, busy: false,
-  };
-  const savePendingDaily = () => {
-    try { localStorage.setItem(PENDING_DAILY_KEY, JSON.stringify(daily.pending)); } catch {}
-  };
-  function applyDaily(data) {
-    if (!data || !Array.isArray(data.top) || data.day !== daily.day) return;
-    daily.rows = data.top.map(r => ({ name: r.name, score: r.score, level: r.level, mine: !!r.you }));
-    daily.me = data.me; daily.players = data.players || 0; daily.status = 'ok';
+  // The daily and 60-second boards: from the artifact's db on claude.ai, from server/ elsewhere.
+  const API_URL = 'https://scores.espertini.com/v1';
+  function remoteBoard(kind) {
+    const key = `color-spin-pending-${kind}`;
+    return {
+      kind, key, source: 'server', status: 'idle', // idle | loading | ok | offline
+      day: '', rows: [], me: null, players: 0, myBest: 0,
+      pending: (() => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } })(),
+      lastGame: null, busy: false,
+    };
   }
-  async function refreshDaily() {
-    if (daily.source !== 'server') return;
-    const day = today();
-    if (daily.day !== day) Object.assign(daily, { day, rows: [], me: null, players: 0, status: 'loading' });
-    if (!net.player) { daily.status = 'offline'; return; }
+  const daily = remoteBoard('daily'), sprint = remoteBoard('sprint');
+  const savePendingOf = rb => {
+    try { localStorage.setItem(rb.key, JSON.stringify(rb.pending)); } catch {}
+  };
+  function applyRemote(rb, data) {
+    if (!data || !Array.isArray(data.top) || (rb === daily && data.day !== daily.day)) return;
+    rb.rows = data.top.map(r => ({ name: r.name, score: r.score, level: r.level, mine: !!r.you }));
+    rb.me = data.me; rb.players = data.players || 0; rb.status = 'ok';
+  }
+  async function refreshRemote(rb) {
+    if (rb.source !== 'server') return;
+    let query = '';
+    if (rb === daily) {
+      const day = today();
+      if (daily.day !== day) Object.assign(daily, { day, rows: [], me: null, players: 0, status: 'loading' });
+      query = `day=${day}&`;
+    } else if (rb.status === 'idle') rb.status = 'loading';
+    if (!net.player) { rb.status = 'offline'; return; }
     try {
-      const res = await fetch(`${DAILY_URL}?day=${day}&player=${net.player}`);
-      if (res.ok) applyDaily(await res.json()); else if (daily.status !== 'ok') daily.status = 'offline';
-    } catch { if (daily.status !== 'ok') daily.status = 'offline'; }
+      const res = await fetch(`${API_URL}/${rb.kind}?${query}player=${net.player}`);
+      if (res.ok) applyRemote(rb, await res.json()); else if (rb.status !== 'ok') rb.status = 'offline';
+    } catch { if (rb.status !== 'ok') rb.status = 'offline'; }
   }
-  function submitDaily(s, lvl, n, duration) {
+  function submitRemote(rb, s, lvl, n, duration) {
     if (!net.player || s <= 0) return false;
-    daily.pending = daily.lastGame = { day: gameDay, score: s, level: lvl, hits: n, duration: Math.round(duration * 10) / 10 };
-    savePendingDaily();
-    syncDaily();
+    rb.pending = rb.lastGame = { ...(rb === daily ? { day: gameDay } : {}), score: s, level: lvl, hits: n,
+      duration: Math.round(duration * 10) / 10 };
+    savePendingOf(rb);
+    syncRemote(rb);
     return true;
   }
   // Same flow as syncGlobal; a name change goes through syncGlobal, and the
-  // server copies it to the daily boards.
-  async function syncDaily() {
-    if (daily.busy || !net.player || !daily.pending) return;
-    const game = daily.pending;
-    daily.busy = true;
+  // server copies it to the other boards.
+  async function syncRemote(rb) {
+    if (rb.busy || !net.player || !rb.pending) return;
+    const game = rb.pending;
+    rb.busy = true;
     let retry = false, offline = false;
     try {
-      const res = await fetch(DAILY_URL, {
+      const res = await fetch(`${API_URL}/${rb.kind}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ player: net.player, name: playerName, ...game }),
       });
       if (res.status === 429) retry = true;
       else {
-        if (res.ok) applyDaily(await res.json());
-        if (res.ok || res.status < 500) { if (daily.pending === game) { daily.pending = null; savePendingDaily(); } }
+        if (res.ok) applyRemote(rb, await res.json());
+        // Refused games are dropped; a 404 (older server) keeps it for later.
+        if (res.ok || (res.status < 500 && res.status !== 404)) { if (rb.pending === game) { rb.pending = null; savePendingOf(rb); } }
       }
     } catch {
       offline = true;
     } finally {
-      daily.busy = false;
+      rb.busy = false;
     }
-    if (retry || (!offline && daily.pending && daily.pending !== game)) setTimeout(syncDaily, RETRY_GAP);
+    if (retry || (!offline && rb.pending && rb.pending !== game)) setTimeout(() => syncRemote(rb), RETRY_GAP);
   }
 
   // --- Sharing --------------------------------------------------------------
@@ -1030,11 +1089,14 @@
       let x = (S - word.reduce((w, [ch]) => w + ctx.measureText(ch).width, 0)) / 2;
       for (const [ch, c] of word) { text(x, 130, ch, 88, c); x += ctx.measureText(ch).width; }
       const n = dayNumber(gameDay);
-      text(S / 2, 200, mode === 'daily' ? `${tr('daily', n)}  ·  ${twistText(twist)[0]}` : tr('card_classic'), 34, PALETTE[2], 1, 'center');
+      const sub = mode === 'daily' ? `${tr('daily', n)}  ·  ${twistText(twist)[0]}`
+        : mode === 'sprint' ? `${tr('mode_sprint')}  ·  ${tr('card_classic')}` : tr('card_classic');
+      text(S / 2, 200, sub, 34, PALETTE[2], 1, 'center');
       ctx.save(); ctx.translate(S / 2, 470); ctx.scale(1.6, 1.6); shape.draw(0, 0); ctx.restore();
       text(S / 2, 860, String(score), 170, WHITE, 1, 'center');
       text(S / 2, 915, tr('points_level', level, bestStreak), 30, WHITE, 0.6, 'center');
-      if (mode === 'daily' && daily.me) text(S / 2, 965, rankText(), 32, PALETTE[2], 1, 'center');
+      const rb = modeBoard();
+      if (rb && rb.me) text(S / 2, 965, rankText(rb), 32, PALETTE[2], 1, 'center');
       const streakDays = mode === 'daily' ? dayStreak() : 0;
       text(S / 2, 1040, streakDays >= 2 ? `${tr('daily_streak', streakDays)}  ·  ${SHARE_URL}` : SHARE_URL, 26, WHITE, 0.45, 'center');
     } finally {
@@ -1042,9 +1104,14 @@
     }
     return card;
   }
-  const rankText = () => daily.players ? tr('daily_rank_of', daily.me.rank, daily.players) : tr('daily_rank', daily.me.rank);
+  // The board of the mode being played, when it has its own.
+  const modeBoard = () => mode === 'daily' ? daily : mode === 'sprint' ? sprint : null;
+  const rankText = rb => rb === daily
+    ? (rb.players ? tr('daily_rank_of', rb.me.rank, rb.players) : tr('daily_rank', rb.me.rank))
+    : (rb.players ? tr('rank_of', rb.me.rank, rb.players) : tr('rank', rb.me.rank));
   function shareText() {
-    const t = mode === 'daily' ? tr('share_daily', dayNumber(gameDay), twistText(twist)[0], score) : tr('share_classic', score);
+    const t = mode === 'daily' ? tr('share_daily', dayNumber(gameDay), twistText(twist)[0], score)
+      : mode === 'sprint' ? tr('share_sprint', score) : tr('share_classic', score);
     return `${t} https://${SHARE_URL}`;
   }
   async function share() {
@@ -1132,7 +1199,11 @@
   let hits = 0, bestStreak = 0, comboPop = 0, slowTime = 0, hint = null;
   // mode: 'classic' or 'daily'; rng drives the balls (seeded in the daily challenge).
   let mode = 'classic', twist = NO_TWIST, rng = Math.random, gameDay = today(), maxLives = MAX_LIVES;
-  let boardTab = 'all'; // leaderboard screen: 'all' or 'today'
+  let boardTab = 'all'; // leaderboard screen: 'all', 'sprint' or 'today'
+  // The mode picked on the menu, and the 60-second clock.
+  let menuMode = (() => { try { return localStorage.getItem(MODE_KEY); } catch { return null; } })();
+  if (!MODES.includes(menuMode)) menuMode = 'classic';
+  let clock = 0, bestSprint = (() => { try { return parseInt(localStorage.getItem(SPRINT_BEST_KEY), 10) || 0; } catch { return 0; } })();
   let seen = (() => { try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY)) || []); } catch { return new Set(); } })();
   let balls = [];
   let dots = [];
@@ -1163,14 +1234,21 @@
     streak = 0; lastRank = 0; lastGameImproved = false; playTime = 0;
     state = STATE.PLAYING; fade = 1;
     shape.setup(sidesForLevel(level));
-    music.playGame(level, tier(level));
+    music.playGame(...musicLevel());
+    clock = SPRINT_TIME;
     if (mode === 'daily') {
       showBanner(tr('daily', dayNumber(gameDay)));
       const [title, line] = twistText(twist);
       hint = { title, line, time: 3.5 };
-      refreshDaily();
-    } else showBanner(tr('banner_level', 1));
+      refreshRemote(daily);
+    } else if (mode === 'sprint') {
+      showBanner(tr('mode_sprint'));
+      refreshRemote(sprint);
+    } else showBanner(mode === 'zen' ? tr('mode_zen') : tr('banner_level', 1));
   }
+  // Zen keeps the music calm: the first tempo and at most three instruments more.
+  const musicLevel = () => mode === 'zen' ? [1, Math.min(tier(level), 2)] : [level, tier(level)];
+  const hasLives = () => mode === 'classic' || mode === 'daily';
 
   const tier = lvl => Math.min(Math.floor((lvl - 1) / LEVELS_PER_SIDE), MAX_SIDES - MIN_SIDES);
   const sidesForLevel = lvl => MIN_SIDES + tier(lvl);
@@ -1178,15 +1256,18 @@
     const t = tier(level);
     return 0.7 * t + 0.5 * (level - 1 - t * LEVELS_PER_SIDE);
   }
-  const travelTime = () => Math.max(1, 2.9 - 0.25 * difficulty()) / (twist.speed || 1);
-  const spawnInterval = () => Math.max(0.5, 1.7 - 0.18 * difficulty());
+  // Zen stops getting faster at an easy pace; 60 seconds starts at a brisker one.
+  const pace = () => mode === 'zen' ? Math.min(difficulty(), ZEN_PACE)
+    : mode === 'sprint' ? difficulty() + SPRINT_BOOST : difficulty();
+  const travelTime = () => Math.max(1, 2.9 - 0.25 * pace()) / (twist.speed || 1);
+  const spawnInterval = () => Math.max(0.5, 1.7 - 0.18 * pace());
   const maxBalls = () => Math.min(level + 1, 3 + tier(level));
   const multiplier = () => 1 + COMBO_STEPS.filter(n => streak >= n).length;
 
   // Special balls, unlocked as the game goes on: [kind, from level, chance per ball].
   // The chameleon keeps getting more frequent, so the game still changes past the octagon.
   const SPECIALS = [
-    ['heart', 4, () => lives < maxLives && !balls.some(b => b.kind === 'heart') ? 0.05 : 0],
+    ['heart', 4, () => (mode === 'sprint' || lives < maxLives) && !balls.some(b => b.kind === 'heart') ? 0.05 : 0],
     ['jolly', 7, () => 0.05],
     ['slow', 10, () => slowTime > 0 || balls.some(b => b.kind === 'slow') ? 0 : 0.03],
     ['chameleon', 16, from => Math.min(0.12 + 0.02 * (level - from), 0.4)],
@@ -1195,6 +1276,8 @@
     let p = 0;
     for (const [kind, usual, chance] of SPECIALS) {
       // The rule of the day can bring a ball in earlier or make it more frequent.
+      // Zen has nothing to win back and no surprises.
+      if (mode === 'zen' && (kind === 'heart' || kind === 'chameleon')) continue;
       const [from, often] = (twist.special && twist.special[kind]) || [usual];
       if (level < from) continue;
       const c = chance(from);
@@ -1253,21 +1336,32 @@
     const len = Math.hypot(b.x, b.y) || 1;
     floatText(b.x + b.x / len * 50, b.y + b.y / len * 50, `+${points}`, color);
     if (mult > before) { comboPop = 1; sfx.play('combo'); showBanner(tr('banner_combo', mult)); }
-    if (b.kind === 'heart' && lives < maxLives) { lives++; sfx.play('power'); showBanner(tr('banner_heart')); }
+    if (b.kind === 'heart' && mode === 'sprint') {
+      clock += SPRINT_HEART; sfx.play('power'); showBanner(tr('banner_time', SPRINT_HEART));
+    } else if (b.kind === 'heart' && lives < maxLives) { lives++; sfx.play('power'); showBanner(tr('banner_heart')); }
     if (b.kind === 'slow') { slowTime = SLOW_TIME; music.setSlow(true); sfx.play('power'); showBanner(tr('banner_slow')); }
     if (b.kind === 'jolly') { sfx.play('power'); for (const c of shape.colors) burst(b.x, b.y, c, 3, 320); }
     if (hits % POINTS_PER_LEVEL === 0) levelUp();
   }
 
   function onMiss(b) {
-    lives--; streak = 0; shake = 14; flash = 1;
+    streak = 0;
+    if (mode === 'zen') { burst(b.x, b.y, [0.75, 0.75, 0.8], 8, 150); sfx.play('soft'); return; }
+    shake = 14; flash = 1;
     burst(b.x, b.y, [0.75, 0.75, 0.8], 10, 200); ring(b.x, b.y, PALETTE[0], 10, 90);
+    if (mode === 'sprint') {
+      clock = Math.max(clock - SPRINT_MISS, 0);
+      floatText(b.x, b.y - 40, `-${SPRINT_MISS}s`, PALETTE[0]);
+      if (clock <= 0) gameOver(); else sfx.play('miss');
+      return;
+    }
+    lives--;
     if (lives <= 0) gameOver(); else sfx.play('miss');
   }
 
   function levelUp() {
     level++;
-    music.setLevel(level, tier(level));
+    music.setLevel(...musicLevel());
     const n = sidesForLevel(level);
     if (n !== shape.sides) {
       // New figure: clear the board, a moment to look at it, and a life back.
@@ -1300,8 +1394,19 @@
       board.localHighlight = -1;
       newBest = lastGameImproved = recordDaily(score);
       if (!newBest) return;
-      if (daily.source === 'claude') submitClaudeDaily(score, level);
-      else if (submitDaily(score, level, hits, playTime)) showNameInput();
+      if (daily.source === 'claude') submitClaudeBoard(daily, score, level);
+      else if (submitRemote(daily, score, level, hits, playTime)) showNameInput();
+      return;
+    }
+    if (mode === 'sprint') {
+      board.localHighlight = -1;
+      if (score > bestSprint) {
+        bestSprint = score; newBest = true;
+        try { localStorage.setItem(SPRINT_BEST_KEY, String(bestSprint)); } catch {}
+      }
+      if (sprint.source === 'claude') submitClaudeBoard(sprint, score, level);
+      else if (score > (sprint.me?.score || 0) && score > (sprint.pending?.score || 0) &&
+        submitRemote(sprint, score, level, hits, playTime)) { lastGameImproved = true; showNameInput(); }
       return;
     }
     if (score > best) { best = score; newBest = true; saveBest(); }
@@ -1331,10 +1436,11 @@
     { x: W / 2 + 8, y: H * 0.77 + 64, w: 272, h: 88 },
     { x: W / 2 - 280, y: H * 0.77 + 64, w: 272, h: 88 },
   ];
-  const boardTabs = () => [
-    { x: W / 2 - 214, y: H * 0.1 + 30, w: 206, h: 56 },
-    { x: W / 2 + 8, y: H * 0.1 + 30, w: 206, h: 56 },
-  ];
+  // Classic, 60 seconds, today.
+  const boardTabs = () => [0, 1, 2].map(i => ({ x: W / 2 - 310 + i * 210, y: H * 0.1 + 30, w: 200, h: 56 }));
+  const BOARD_TABS = ['all', 'sprint', 'today'];
+  // The mode chips above the play button.
+  const modeChips = () => MODES.map((m, i) => ({ x: W / 2 - 300 + i * 202, y: H / 2 + 196, w: 196, h: 56 }));
   const settingsButton = () => ({ x: W - 92, y: 24, w: 68, h: 68 });
   // Music, sounds, language, back.
   const settingsButtons = () => [0, 1, 2, 3].map(i =>
@@ -1372,14 +1478,19 @@
         sfx.play('click'); state = STATE.SETTINGS; fade = 0.6;
       }
       else if (action === 'tap' && hit(menuButtons()[1], pos)) {
-        sfx.play('click'); state = STATE.LEADERBOARD; fade = 0.6; boardTab = 'all'; refreshNames();
+        sfx.play('click'); state = STATE.LEADERBOARD; fade = 0.6; refreshNames();
+        boardTab = menuMode === 'sprint' ? 'sprint' : 'all';
         if (board.status === 'global' || board.status === 'local') { refreshGlobal(); syncGlobal(); }
-        refreshDaily(); syncDaily();
+        for (const rb of [daily, sprint]) { refreshRemote(rb); syncRemote(rb); }
       } else if (action === 'tap' && hit(menuButtons()[2], pos)) {
         start('daily');
+      } else if (action === 'tap' && modeChips().some(r => hit(r, pos))) {
+        menuMode = MODES[modeChips().findIndex(r => hit(r, pos))];
+        try { localStorage.setItem(MODE_KEY, menuMode); } catch {}
+        sfx.play('click');
       } else if (action === 'info' || (action === 'tap' && hit(infoButton(), pos))) {
         sfx.play('click'); state = STATE.ABOUT; fade = 0.6;
-      } else if (action !== 'back') start('classic');
+      } else if (action !== 'back') start(menuMode);
     } else if (state === STATE.PLAYING) {
       if (action === 'pause' || action === 'back' || (action === 'tap' && hit(grow(pauseButton(), 12), pos))) {
         pause(); return;
@@ -1421,8 +1532,9 @@
       }
     } else if (state === STATE.LEADERBOARD && action === 'tap' && boardTabs().some(r => hit(r, pos))) {
       sfx.play('click');
-      boardTab = hit(boardTabs()[0], pos) ? 'all' : 'today';
-      if (boardTab === 'today') refreshDaily();
+      boardTab = BOARD_TABS[boardTabs().findIndex(r => hit(r, pos))];
+      if (boardTab === 'today') refreshRemote(daily);
+      if (boardTab === 'sprint') refreshRemote(sprint);
     } else if (state === STATE.ABOUT && action === 'tap' && hit(linkRect, pos)) {
       sfx.play('click'); openLink(SITE_URL);
     } else {
@@ -1541,6 +1653,13 @@
       if (balls.length >= maxBalls()) spawnTimer = Math.max(spawnTimer, 0.4);
       else if (spawnTimer <= 0) { spawnBall(); spawnTimer = spawnInterval(); }
       checkHits();
+      if (mode === 'sprint' && state === STATE.PLAYING) {
+        // The clock runs slower in slow motion too; a tick for each of the last 5 seconds.
+        const before = Math.ceil(clock);
+        clock = Math.max(clock - dt * k, 0);
+        if (clock <= 0) gameOver();
+        else if (Math.ceil(clock) < before && clock < 5) sfx.play('click');
+      }
     } else {
       gameOverTime += dt;
     }
@@ -1694,8 +1813,12 @@
     centered('SPIN', y + 100, size, WHITE);
 
     const cy = H / 2;
-    centered(tr('tagline_1'), cy + 232, 24, WHITE, 0.85);
-    centered(tr('tagline_2'), cy + 266, 22, WHITE, 0.5);
+    centered(tr('tagline_1'), cy - 245, 24, WHITE, 0.85);
+    centered(tr('tagline_2'), cy - 212, 22, WHITE, 0.5);
+    modeChips().forEach((r, i) => {
+      const on = MODES[i] === menuMode;
+      button(r, tr(`mode_${MODES[i]}`), on ? WHITE : WHITE, on ? 0.9 : 0.08, on ? INK : WHITE);
+    });
 
     const [r, lb, db] = menuButtons(), p = 1 + Math.sin(time * 4) * 0.03;
     const grown = { x: r.x - r.w * (p - 1) / 2, y: r.y - r.h * (p - 1) / 2, w: r.w * p, h: r.h * p };
@@ -1703,12 +1826,16 @@
     button(lb, tr('leaderboard'), WHITE, 0.1, WHITE);
     const day = today();
     button(db, tr('daily', dayNumber(day)), PALETTE[4], 1, INK);
-    if (best > 0) centered(tr('best', best), lb.y + lb.h + 48, 24, WHITE, 0.55);
+    // The record of the picked mode, or what the mode is about.
+    const modeLine = menuMode === 'zen' ? tr('mode_info_zen')
+      : menuMode === 'sprint' ? (bestSprint > 0 ? tr('best', bestSprint) : tr('mode_info_sprint'))
+      : best > 0 ? tr('best', best) : '';
+    if (modeLine) centered(modeLine, lb.y + lb.h + 48, menuMode === 'classic' || bestSprint > 0 && menuMode === 'sprint' ? 24 : 20, WHITE, 0.55);
     // Today's rule, today's best and the days in a row.
     const info = [twistText(twistFor(day))[0]];
     if (todayBest() > 0) info.push(tr('daily_today', todayBest()));
     if (dayStreak() >= 2) info.push(tr('daily_streak', dayStreak()));
-    centered(info.join('  ·  '), lb.y + lb.h + (best > 0 ? 84 : 48), 20, PALETTE[4], 0.9);
+    centered(info.join('  ·  '), lb.y + lb.h + (modeLine ? 84 : 48), 20, PALETTE[4], 0.9);
     drawSettingsIcon(settingsButton());
     drawInfoIcon(infoButton());
   }
@@ -1795,10 +1922,16 @@
   function drawLeaderboard() {
     ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
     centered(tr('leaderboard'), H * 0.1, 60, WHITE);
-    const tabs = boardTabs();
-    button(tabs[0], tr('tab_all'), boardTab === 'all' ? PALETTE[2] : WHITE, boardTab === 'all' ? 1 : 0.1, boardTab === 'all' ? INK : WHITE);
-    button(tabs[1], tr('tab_today'), boardTab === 'today' ? PALETTE[4] : WHITE, boardTab === 'today' ? 1 : 0.1, boardTab === 'today' ? INK : WHITE);
-    if (boardTab === 'today') { drawDailyBoard(); return; }
+    boardTabs().forEach((r, i) => {
+      const on = BOARD_TABS[i] === boardTab, c = i === 2 ? PALETTE[4] : PALETTE[2];
+      button(r, tr(['tab_classic', 'tab_sprint', 'tab_today'][i]), on ? c : WHITE, on ? 1 : 0.1, on ? INK : WHITE);
+    });
+    const day = today();
+    if (boardTab === 'today') {
+      drawRemoteBoard(daily, `${tr('daily', dayNumber(day))}  ·  ${twistText(twistFor(day))[0]}`, tr('no_daily'));
+      return;
+    }
+    if (boardTab === 'sprint') { drawRemoteBoard(sprint, tr('top_sprint'), tr('no_sprint')); return; }
     const local = board.status === 'local', global = board.status === 'global';
     centered(tr(local ? 'top_local' : global ? 'top_world' : 'top_online'),
       H * 0.1 + 124, 20, WHITE, 0.5);
@@ -1818,20 +1951,19 @@
     centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
   }
 
-  // Today's board: rule of the day as the subtitle, then the same rows.
-  function drawDailyBoard() {
-    const day = today();
-    centered(`${tr('daily', dayNumber(day))}  ·  ${twistText(twistFor(day))[0]}`, H * 0.1 + 124, 20, PALETTE[4], 0.9);
+  // The daily and 60-second boards: a subtitle, then the same rows.
+  function drawRemoteBoard(rb, subtitle, empty) {
+    centered(subtitle, H * 0.1 + 124, 20, rb === daily ? PALETTE[4] : WHITE, rb === daily ? 0.9 : 0.5);
     const y0 = H * 0.21;
-    if (daily.status === 'offline' && !daily.rows.length) centered(tr('offline'), H * 0.4, 24, WHITE, 0.6);
-    else if (daily.status !== 'ok') centered(tr('loading'), H * 0.4, 24, WHITE, 0.6);
-    else if (!daily.rows.length) centered(tr('no_daily'), H * 0.4, 24, WHITE, 0.6);
-    const global = daily.source === 'server';
-    daily.rows.forEach((r, i) => boardRow(y0 + i * 66, i + 1, r, r.mine, false, global));
-    if (global && daily.me && daily.me.rank > daily.rows.length) {
-      const y = y0 + daily.rows.length * 66 + 10;
+    if (rb.status === 'offline' && !rb.rows.length) centered(tr('offline'), H * 0.4, 24, WHITE, 0.6);
+    else if (rb.status !== 'ok') centered(tr('loading'), H * 0.4, 24, WHITE, 0.6);
+    else if (!rb.rows.length) centered(empty, H * 0.4, 24, WHITE, 0.6);
+    const global = rb.source === 'server';
+    rb.rows.forEach((r, i) => boardRow(y0 + i * 66, i + 1, r, r.mine, false, global));
+    if (global && rb.me && rb.me.rank > rb.rows.length) {
+      const y = y0 + rb.rows.length * 66 + 10;
       centered('···', y + 4, 24, WHITE, 0.4);
-      boardRow(y + 20, daily.me.rank, daily.me, true, false, true);
+      boardRow(y + 20, rb.me.rank, rb.me, true, false, true);
     }
     centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
   }
@@ -1900,13 +2032,22 @@
     text(30, 118, tr('hud_level', level), 20, WHITE, 0.55);
     if (streak >= 3) text(30, 146, tr('hud_combo', streak), 18, PALETTE[2], 0.7);
     if (mode === 'daily') text(W - 24, 104, tr('daily', dayNumber(gameDay)), 18, PALETTE[4], 0.85, 'right');
+    if (mode === 'zen') text(W - 28, 72, tr('mode_zen'), 26, PALETTE[6], 0.6, 'right');
+    if (mode === 'sprint') {
+      // Time left, red in the last 10 seconds, with a bar under it.
+      const secs = Math.ceil(clock), low = clock < 10;
+      const pop = low && state === STATE.PLAYING ? 1 + 0.08 * Math.max(0, Math.cos((clock % 1) * TAU)) : 1;
+      text(W - 28, 84, `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`, 52 * pop, low ? PALETTE[0] : WHITE, 1, 'right');
+      ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(W - 188, 100, 160, 6);
+      ctx.fillStyle = rgba(low ? PALETTE[0] : PALETTE[6]); ctx.fillRect(W - 188, 100, 160 * clamp(clock / SPRINT_TIME, 0, 1), 6);
+    }
     if (slowTime > 0) {
       // Time left in slow motion, as an arc around the shape.
       ctx.beginPath();
       ctx.arc(worldX, worldY, 200, -Math.PI / 2, -Math.PI / 2 + TAU * slowTime / SLOW_TIME);
       ctx.strokeStyle = rgba(PALETTE[6], 0.8); ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke();
     }
-    for (let i = 0; i < maxLives; i++) {
+    for (let i = 0; hasLives() && i < maxLives; i++) {
       const x = W - 36 - i * 34, y = 56;
       if (i < lives) {
         circle(x, y, 17, rgba(PALETTE[0], 0.2));
@@ -1959,13 +2100,15 @@
     ctx.fillStyle = rgba(BG_BOTTOM, 0.8 * t); ctx.fillRect(0, 0, W, H);
     const slide = (1 - t) * 40;
     if (mode === 'daily') centered(`${tr('daily', dayNumber(gameDay))}  ·  ${twistText(twist)[0]}`, H * 0.27 - 76 + slide, 24, PALETTE[4], t);
-    centered(tr('game_over'), H * 0.27 + slide, 68, PALETTE[0], t);
+    if (mode === 'sprint') centered(tr('mode_sprint'), H * 0.27 - 76 + slide, 24, PALETTE[6], t);
+    centered(tr(mode === 'sprint' ? 'time_up' : 'game_over'), H * 0.27 + slide, 68, PALETTE[0], t);
     centered(String(score), H * 0.41 + slide, 130, WHITE, t);
     centered(tr('points_level', level, bestStreak), H * 0.41 + 44 + slide, 22, WHITE, 0.55 * t);
     const daySide = mode === 'daily';
     if (newBest) centered(tr(daySide ? 'daily_new_best' : 'new_best'), H * 0.52 + slide, 34 + Math.sin(time * 6) * 3, PALETTE[2], t);
-    else centered(daySide ? tr('daily_best', todayBest()) : tr('best', best), H * 0.52 + slide, 26, WHITE, 0.6 * t);
-    if (daySide) { if (daily.me) centered(rankText(), H * 0.52 + 44 + slide, 22, WHITE, 0.7 * t); }
+    else centered(daySide ? tr('daily_best', todayBest()) : tr('best', mode === 'sprint' ? bestSprint : best), H * 0.52 + slide, 26, WHITE, 0.6 * t);
+    const rb = modeBoard();
+    if (rb) { if (rb.me) centered(rankText(rb), H * 0.52 + 44 + slide, 22, WHITE, 0.7 * t); }
     else if (lastRank > 0) centered(tr('rank', lastRank), H * 0.52 + 44 + slide, 22, WHITE, 0.7 * t);
     else if (score > 0 && board.status === 'ready' && !board.myId)
       centered(tr('sign_in'), H * 0.52 + 44 + slide, 20, WHITE, 0.5 * t);
