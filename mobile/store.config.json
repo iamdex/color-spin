@@ -87,7 +87,7 @@
       "email": "",
       "phone": "",
       "demoRequired": false,
-      "notes": "Color Spin is a single-player arcade game. No account or login is needed. Tap the left or right half of the screen to turn the shape so each ball hits the side of its color. The game runs fully offline; the only network use is the optional global leaderboard (anonymous random player id, the nickname the player types, and scores). Links to the developer's website open in Safari. There are no ads and no in-app purchases."
+      "notes": "Color Spin is a single-player arcade game. No account or login is needed. Tap the left or right half of the screen to turn the shape so each ball hits the side of its color. The game runs fully offline; the only network use is the optional global leaderboard (anonymous random player id, the nickname the player types, and scores). Leaderboard nicknames are filtered on the server for offensive words, and the leaderboard screen has a link to report a name. Links to the developer's website open in Safari. There are no ads and no in-app purchases."
     }
   }
 }

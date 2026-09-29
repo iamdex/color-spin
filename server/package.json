@@ -1,5 +1,6 @@
 {
   "name": "color-spin-scores",
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "db:init:local": "wrangler d1 execute color-spin-scores --local --file schema.sql",

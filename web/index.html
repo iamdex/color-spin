@@ -49,7 +49,7 @@
   const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6, AWARDS: 7, SPLASH: 8 };
   const SPLASH_TIME = 3.3; // the opening: the logo builds itself, the title, the author
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
-  const VERSION = '1.7';
+  const VERSION = '1.7.1';
   // Hits in a row for x2, x3 and x4. A miss starts the count again.
   const COMBO_STEPS = [10, 25, 50];
   const JOLLY_POINTS = 3, SLOW_TIME = 5, SLOW_FACTOR = 0.5;
@@ -212,6 +212,8 @@
       "resume": "RIPRENDI",
       "top_local": "I 10 migliori punteggi su questo dispositivo",
       "no_scores": "Ancora nessun punteggio: gioca una partita!",
+      "name_refused": "Questo nome non è consentito in classifica",
+      "report": "Nome offensivo? Segnalalo su espertini.com",
       "tap_back": "Tocca per tornare al menu",
       "version": "Versione %s",
       "row_level": "liv. %d",
@@ -390,6 +392,8 @@
       "resume": "RESUME",
       "top_local": "Top 10 scores on this device",
       "no_scores": "No scores yet: play a game!",
+      "name_refused": "That name isn't allowed on the leaderboard",
+      "report": "Offensive name? Report it at espertini.com",
       "tap_back": "Tap to go back to the menu",
       "version": "Version %s",
       "row_level": "lv. %d",
@@ -1123,8 +1127,14 @@
   const savePending = () => {
     try { localStorage.setItem(PENDING_KEY, JSON.stringify(net.pending)); } catch {}
   };
+  // The server leaves out offensive names (server/src/names.js): tell the player, once per name.
+  let refusedName = '';
+  function checkName(me) {
+    if (me && playerName && !me.name && refusedName !== playerName) { refusedName = playerName; showToast(tr('name_refused')); }
+  }
   function applyGlobal(data) {
     if (!data || !Array.isArray(data.top)) return;
+    checkName(data.me);
     board.status = 'global';
     board.rows = data.top.map(r => ({ name: r.name, score: r.score, level: r.level, mine: !!r.you }));
     board.me = data.me;
@@ -1240,6 +1250,7 @@
   };
   function applyRemote(rb, data) {
     if (!data || !Array.isArray(data.top) || (rb === daily && data.day !== daily.day)) return;
+    checkName(data.me);
     rb.rows = data.top.map(r => ({ name: r.name, score: r.score, level: r.level, mine: !!r.you }));
     rb.me = data.me; rb.players = data.players || 0; rb.status = 'ok';
   }
@@ -1793,6 +1804,8 @@
       else if (action === 'back' || (action === 'tap' && hit(rows[4], pos))) {
         sfx.play('click'); state = STATE.MENU; fade = 0.6;
       }
+    } else if (state === STATE.LEADERBOARD && action === 'tap' && hit(reportRect, pos)) {
+      sfx.play('click'); openLink(SITE_URL);
     } else if (state === STATE.LEADERBOARD && action === 'tap' && boardTabs().some(r => hit(r, pos))) {
       sfx.play('click');
       boardTab = BOARD_TABS[boardTabs().findIndex(r => hit(r, pos))];
@@ -2505,7 +2518,18 @@
       row(y + 20, board.me.rank, board.me, true);
     }
     if (board.status === 'ready' && !board.myId) centered(tr('sign_in'), H * 0.84, 20, WHITE, 0.5);
+    drawReport();
     centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
+  }
+  // How to report a name: a link to the author's site.
+  let reportRect = { x: 0, y: 0, w: 0, h: 0 };
+  function drawReport() {
+    const y = H * 0.9 - 46;
+    ctx.font = `800 18px ${FONT}`;
+    const w = ctx.measureText(tr('report')).width;
+    centered(tr('report'), y, 18, WHITE, 0.4);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect((W - w) / 2, y + 5, w, 1.5);
+    reportRect = { x: (W - w) / 2 - 16, y: y - 30, w: w + 32, h: 46 };
   }
 
   // The daily and 60-second boards: a subtitle, then the same rows.
@@ -2522,6 +2546,7 @@
       centered('···', y + 4, 24, WHITE, 0.4);
       boardRow(y + 20, rb.me.rank, rb.me, true, false, true);
     }
+    drawReport();
     centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
   }
 

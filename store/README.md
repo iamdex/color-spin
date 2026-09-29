@@ -54,11 +54,15 @@ completa è su https://color-spin.espertini.com/privacy.html.
 
 ### Da sapere prima dell'invio
 
-- **Nomi in classifica.** Per le app con contenuti scritti dagli utenti Apple chiede
-  (linea guida 1.2) un filtro per i contenuti offensivi e un modo per segnalarli. Oggi i nomi
-  non hanno filtri. Conviene aggiungere un filtro delle parole offensive sul server, più un
-  contatto per le segnalazioni (c'è già nella pagina privacy) prima di inviare: riduce molto
-  il rischio di un rifiuto.
+- **Nomi in classifica.** Per i contenuti scritti dagli utenti Apple chiede (linea guida 1.2)
+  un filtro e un modo per segnalarli. Ci sono tutti e due:
+  - il server scarta i nomi offensivi in italiano e inglese (`server/src/names.js`): il giocatore
+    compare come "Giocatore" e il gioco lo avvisa;
+  - nella classifica, "Nome offensivo? Segnalalo su espertini.com" apre il sito.
+
+  Per togliere a mano un nome segnalato, da `server/` (con il token in `.env`):
+  `npx wrangler d1 execute color-spin-scores --remote --command "UPDATE players SET name='' WHERE name='NOME'; UPDATE daily SET name='' WHERE name='NOME'; UPDATE sprint SET name='' WHERE name='NOME'; UPDATE hardcore SET name='' WHERE name='NOME'"`.
+  Nelle note per la revisione puoi scrivere che i nomi sono filtrati e segnalabili.
 - **URL di supporto**: è https://espertini.com. Apple vuole che da lì si possa contattare
   lo sviluppatore: assicurati che il sito abbia un contatto visibile.
 - **Note per la revisione**: sono già scritte in inglese in `store.config.json`, dove
@@ -152,8 +156,8 @@ i nomi in classifica. Il gioco resta adatto a tutti: la classificazione dei cont
 
 ### Da sapere
 
-- **Il filtro per i nomi** in classifica, consigliato per Apple, aiuta anche qui: Google chiede
-  di moderare i contenuti generati dagli utenti.
+- **I nomi in classifica** sono filtrati e segnalabili (vedi la sezione App Store): è quello che
+  Google chiede per i contenuti generati dagli utenti.
 - Quando l'app è pubblicata, il link è
   `https://play.google.com/store/apps/details?id=com.espertini.colorspin`: va messo in
   `STORE_LINKS.play` in `site/index.html`.

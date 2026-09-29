@@ -15,6 +15,8 @@
 // /v1/daily is the same board for one day of the daily challenge, /v1/sprint
 // and /v1/hardcore the ones of those modes.
 
+import { isOffensive } from './names.js';
+
 const TOP_SIZE = 10;
 const NAME_MAX = 14;           // same as the name field in the game
 const POINTS_PER_LEVEL = 10;   // same rule as the game: a level every 10 balls hit
@@ -44,11 +46,13 @@ const validPlayer = id => typeof id === 'string' && /^[0-9a-f]{32}$/.test(id);
 const validDay = day => typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day) &&
   Math.abs(Date.parse(day) - Date.parse(new Date().toISOString().slice(0, 10))) <= DAY_MS;
 
-// Printable text only, single spaces, at most NAME_MAX characters.
+// Printable text only, single spaces, at most NAME_MAX characters. An
+// offensive name is dropped: the game then shows the player as "Player".
 function cleanName(name) {
   if (typeof name !== 'string') return '';
   const s = name.normalize('NFC').replace(/[\p{C}]/gu, '').replace(/\s+/g, ' ').trim();
-  return [...s].slice(0, NAME_MAX).join('').trim();
+  const clean = [...s].slice(0, NAME_MAX).join('').trim();
+  return isOffensive(clean) ? '' : clean;
 }
 
 // The boards: all-time, 60 seconds and hardcore (one row per player), daily (one per day and player).
