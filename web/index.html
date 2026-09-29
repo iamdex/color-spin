@@ -48,7 +48,7 @@
   const FONT = 'Montserrat, "Arial Black", Arial, sans-serif';
   const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6, AWARDS: 7 };
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
-  const VERSION = '1.6';
+  const VERSION = '1.6.1';
   // Hits in a row for x2, x3 and x4. A miss starts the count again.
   const COMBO_STEPS = [10, 25, 50];
   const JOLLY_POINTS = 3, SLOW_TIME = 5, SLOW_FACTOR = 0.5;
@@ -72,6 +72,15 @@
   // Hardcore: one life, a fast pace from the start, no hearts.
   const MODES = ['classic', 'sprint', 'zen', 'hardcore'], MODE_KEY = 'color-spin-mode';
   const SPRINT_TIME = 60, SPRINT_MISS = 3, SPRINT_HEART = 5, SPRINT_BOOST = 2, ZEN_PACE = 3, HARDCORE_BOOST = 3;
+  // Each mode's color and icon, the same as on the presentation site (site/):
+  // SVG paths on a 24x24 grid, filled or stroked.
+  const MODE_COLORS = { classic: '#ffd43b', sprint: '#3bc9db', zen: '#51cf66', hardcore: '#ff4d6d' };
+  const MODE_ICONS = {
+    classic: [['fill', 'M12 3l8 5v8l-8 5-8-5V8z']],
+    sprint: [['stroke', 'M20 13a8 8 0 1 1-16 0a8 8 0 1 1 16 0'], ['stroke', 'M12 9v4l3 2M9 2h6']],
+    zen: [['fill', 'M12 21c-5-2-8-6-8-11 3 0 6 1.5 8 4 2-2.5 5-4 8-4 0 5-3 9-8 11z']],
+    hardcore: [['fill', 'M13 2L4 14h7l-1 8 9-12h-7z']],
+  };
 
   // Colorblind help: a symbol for each color, in PALETTE's order.
   const SYMBOLS = ['dot', 'square', 'triangle', 'diamond', 'plus', 'cross', 'star', 'bars'];
@@ -2106,18 +2115,46 @@
   }
 
   // A button with a small second line under its label.
-  function button2(r, label, sub, bg, fg) {
+  // A mode's icon, `size` wide, centered on x, y.
+  function drawModeIcon(m, x, y, size, color) {
+    ctx.save();
+    ctx.translate(x - size / 2, y - size / 2); ctx.scale(size / 24, size / 24);
+    ctx.fillStyle = ctx.strokeStyle = color; ctx.lineWidth = 2.6; ctx.lineCap = ctx.lineJoin = 'round';
+    for (const [how, d] of MODE_ICONS[m]) { const path = new Path2D(d); if (how === 'fill') ctx.fill(path); else ctx.stroke(path); }
+    ctx.restore();
+  }
+  // Text with a mode's icon before it; align 'center' or 'right' (at x).
+  function iconText(m, x, y, str, size, color, alpha = 1, align = 'center') {
+    ctx.font = `800 ${Math.round(size)}px ${FONT}`;
+    const icon = size * 1.3, gap = size * 0.4, w = ctx.measureText(str).width;
+    const left = align === 'right' ? x - w - gap - icon : x - (icon + gap + w) / 2;
+    ctx.globalAlpha = alpha;
+    drawModeIcon(m, left + icon / 2, y - size * 0.36, icon, rgba(color));
+    ctx.globalAlpha = 1;
+    text(left + icon + gap, y, str, size, color, alpha);
+  }
+  // A button with a small second line under its label, and a mode icon before that line.
+  function button2(r, label, sub, bg, fg, icon) {
     roundRect(r, r.h / 2);
     ctx.save(); ctx.shadowColor = rgba(bg, 0.35); ctx.shadowBlur = 28; ctx.fillStyle = rgba(bg); ctx.fill(); ctx.restore();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = rgba(fg);
-    const fit = (str, size, y, alpha) => {
+    const fit = (str, size, room) => {
       let fs = size;
       ctx.font = `800 ${fs}px ${FONT}`;
-      while (fs > 12 && ctx.measureText(str).width > r.w - 40) ctx.font = `800 ${--fs}px ${FONT}`;
-      ctx.globalAlpha = alpha; ctx.fillText(str, r.x + r.w / 2, y); ctx.globalAlpha = 1;
+      while (fs > 12 && ctx.measureText(str).width > room) ctx.font = `800 ${--fs}px ${FONT}`;
+      return fs;
     };
-    fit(label, Math.round(r.h * 0.34), r.y + r.h * 0.4, 1);
-    fit(sub, Math.round(r.h * 0.17), r.y + r.h * 0.74, 0.7);
+    const cx = r.x + r.w / 2;
+    fit(label, Math.round(r.h * 0.34), r.w - 40);
+    ctx.fillText(label, cx, r.y + r.h * 0.4);
+    const y = r.y + r.h * 0.74, fs = fit(sub, Math.round(r.h * 0.17), r.w - 40 - (icon ? r.h * 0.3 : 0));
+    ctx.globalAlpha = 0.7;
+    if (icon) {
+      const size = fs * 1.5, gap = fs * 0.45, left = cx - (size + gap + ctx.measureText(sub).width) / 2;
+      drawModeIcon(icon, left + size / 2, y, size, rgba(fg));
+      ctx.textAlign = 'left'; ctx.fillText(sub, left + size + gap, y);
+    } else ctx.fillText(sub, cx, y);
+    ctx.globalAlpha = 1;
   }
   // A left or right chevron in a soft circle.
   function drawChevron(r, dir, flash) {
@@ -2246,7 +2283,7 @@
     const [r, lb, db, prev, next] = menuButtons(), p = 1 + Math.sin(time * 4) * 0.03;
     const grown = { x: r.x - r.w * (p - 1) / 2, y: r.y - r.h * (p - 1) / 2, w: r.w * p, h: r.h * p };
     const modeName = tr(`mode_${menuMode}`), record = menuMode === 'classic' ? best : records[menuMode] || 0;
-    button2(grown, tr('play'), record > 0 ? tr('mode_best', modeName, record) : modeName, PALETTE[2], INK);
+    button2(grown, tr('play'), record > 0 ? tr('mode_best', modeName, record) : modeName, hex(MODE_COLORS[menuMode]), INK, menuMode);
     drawChevron(prev, -1, modeFlash < 0 ? -modeFlash : 0);
     drawChevron(next, 1, modeFlash > 0 ? modeFlash : 0);
 
@@ -2476,7 +2513,8 @@
     text(30, 118, tr('hud_level', level), 20, WHITE, 0.55);
     if (streak >= 3) text(30, 146, tr('hud_combo', streak), 18, PALETTE[2], 0.7);
     if (mode === 'daily') text(W - 24, 104, tr('daily', dayNumber(gameDay)), 18, PALETTE[4], 0.85, 'right');
-    if (mode === 'zen') text(W - 28, 72, tr('mode_zen'), 26, PALETTE[6], 0.6, 'right');
+    if (mode === 'zen') iconText('zen', W - 28, 72, tr('mode_zen'), 26, hex(MODE_COLORS.zen), 0.7, 'right');
+    if (mode === 'hardcore') iconText('hardcore', W - 24, 104, tr('mode_hardcore'), 18, hex(MODE_COLORS.hardcore), 0.85, 'right');
     if (mode === 'sprint') {
       // Time left, red in the last 10 seconds, with a bar under it.
       const secs = Math.ceil(clock), low = clock < 10;
@@ -2544,8 +2582,7 @@
     ctx.fillStyle = rgba(BG_BOTTOM, 0.8 * t); ctx.fillRect(0, 0, W, H);
     const slide = (1 - t) * 40;
     if (mode === 'daily') centered(`${tr('daily', dayNumber(gameDay))}  ·  ${twistText(twist)[0]}`, H * 0.27 - 76 + slide, 24, PALETTE[4], t);
-    if (mode === 'sprint') centered(tr('mode_sprint'), H * 0.27 - 76 + slide, 24, PALETTE[6], t);
-    if (mode === 'hardcore') centered(tr('mode_hardcore'), H * 0.27 - 76 + slide, 24, PALETTE[0], t);
+    if (mode === 'sprint' || mode === 'hardcore') iconText(mode, W / 2, H * 0.27 - 76 + slide, tr(`mode_${mode}`), 24, hex(MODE_COLORS[mode]), t);
     centered(tr(mode === 'sprint' ? 'time_up' : 'game_over'), H * 0.27 + slide, 68, PALETTE[0], t);
     centered(String(score), H * 0.41 + slide, 130, WHITE, t);
     centered(tr('points_level', level, bestStreak), H * 0.41 + 44 + slide, 22, WHITE, 0.55 * t);
