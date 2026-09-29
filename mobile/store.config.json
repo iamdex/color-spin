@@ -1,0 +1,93 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "copyright": "2026 Davide Dex Espertini",
+    "version": "1.7.0",
+    "categories": [
+      [
+        "GAMES",
+        "GAMES_CASUAL",
+        "GAMES_ACTION"
+      ]
+    ],
+    "info": {
+      "it": {
+        "title": "Color Spin",
+        "subtitle": "Ruota, abbina, non fermarti",
+        "promoText": "Nuovo: la sfida del giorno! Ogni giorno una sequenza di palline uguale per tutti, con una regola speciale. Fin dove arrivi in classifica?",
+        "description": "Ruota la figura e fai toccare a ogni pallina il lato del suo colore. Un tocco a sinistra, un tocco a destra: facile da imparare, impossibile da mollare.\n\nCOME SI GIOCA\n• Tocca a sinistra o a destra per ruotare la figura di un lato.\n• Ogni pallina deve arrivare sul lato del suo colore. Sbagli? Perdi una vita.\n• Ogni 10 palline sali di livello; ogni 3 livelli la figura prende un lato e ti ridà una vita: dal triangolo fino all'ottagono.\n\nCOMBO\nDieci palline giuste di fila e i punti raddoppiano, venticinque e triplicano, cinquanta e sei a x4. Basta un errore per ripartire da capo.\n\nPALLINE SPECIALI\n• Cuore: una vita in più.\n• Arcobaleno: va bene su ogni lato e vale il triplo.\n• Clessidra: cinque secondi al rallentatore.\n• Camaleonte: cambia colore all'ultimo momento.\n\nQUATTRO MODALITÀ\n• Classica: cinque vite e tutta la progressione.\n• 60 secondi: più punti che puoi, un errore costa 3 secondi.\n• Zen: niente vite e niente fretta, solo colori e musica.\n• Hardcore: una vita sola e ritmo alto da subito.\n\nLA SFIDA DEL GIORNO\nOgni giorno una sequenza di palline nuova, uguale per tutti i giocatori, con una regola speciale. Tentativi illimitati, in classifica conta il migliore. Tieni viva la serie di giorni di fila e condividi il risultato con un'immagine pronta.\n\nTROFEI, TEMI E SCIE\nUndici trofei da conquistare: ognuno sblocca un tema di sfondo o una scia per le palline.\n\nPER TUTTI\nCon i simboli attivi ogni colore ha la sua forma, sulla figura e dentro le palline: si gioca anche se non si distinguono i colori.\n\nE ANCORA\n• Classifiche mondiali per ogni modalità e per la sfida del giorno.\n• Grafica, suoni e musica generati dal codice: la colonna sonora aggiunge uno strumento a ogni nuova figura.\n• Funziona anche offline.\n• Nessuna pubblicità, nessun account, nessun acquisto.\n• In italiano e in inglese.",
+        "keywords": [
+          "colori",
+          "riflessi",
+          "arcade",
+          "ruotare",
+          "abbinare",
+          "forme",
+          "rompicapo",
+          "sfida",
+          "classifica",
+          "zen",
+          "combo",
+          "casual"
+        ],
+        "marketingUrl": "https://color-spin.espertini.com/",
+        "supportUrl": "https://espertini.com",
+        "privacyPolicyUrl": "https://color-spin.espertini.com/privacy.html"
+      },
+      "en-US": {
+        "title": "Color Spin",
+        "subtitle": "Spin, match, don't stop",
+        "promoText": "New: the daily challenge! Every day a sequence of balls that's the same for everyone, with a special rule. How high can you climb?",
+        "description": "Spin the shape and send every ball to the side of its color. A tap on the left, a tap on the right: easy to learn, impossible to put down.\n\nHOW TO PLAY\n• Tap left or right to turn the shape by one side.\n• Every ball has to land on the side of its color. Miss one and you lose a life.\n• Every 10 balls you level up; every 3 levels the shape gains a side and gives you a life back: from the triangle all the way to the octagon.\n\nCOMBOS\nTen hits in a row and your points double, twenty-five and they triple, fifty and you're at x4. One miss and you start over.\n\nSPECIAL BALLS\n• Heart: one more life.\n• Rainbow: fits any side and is worth three times the points.\n• Hourglass: five seconds of slow motion.\n• Chameleon: changes color at the last moment.\n\nFOUR MODES\n• Classic: five lives and the whole journey.\n• 60 seconds: as many points as you can, a miss costs 3 seconds.\n• Zen: no lives and no rush, just colors and music.\n• Hardcore: one life and a fast pace from the start.\n\nTHE DAILY CHALLENGE\nEvery day a new sequence of balls, the same for every player, with a special rule. Unlimited tries, your best one counts. Keep your streak of days alive and share your result with a ready-made picture.\n\nAWARDS, THEMES AND TRAILS\nEleven awards to win: each one unlocks a background theme or a trail for the balls.\n\nFOR EVERYONE\nTurn on symbols and every color gets its own shape, on the figure and inside the balls, so you can play even if you can't tell the colors apart.\n\nAND MORE\n• World leaderboards for every mode and for the daily challenge.\n• Graphics, sounds and music generated in code: the soundtrack adds an instrument with every new shape.\n• Works offline.\n• No ads, no accounts, no purchases.\n• In English and Italian.",
+        "keywords": [
+          "color",
+          "reflex",
+          "arcade",
+          "rotate",
+          "match",
+          "shapes",
+          "puzzle",
+          "daily",
+          "leaderboard",
+          "zen",
+          "combo",
+          "casual"
+        ],
+        "marketingUrl": "https://color-spin.espertini.com/",
+        "supportUrl": "https://espertini.com",
+        "privacyPolicyUrl": "https://color-spin.espertini.com/privacy.html"
+      }
+    },
+    "advisory": {
+      "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+      "contests": "NONE",
+      "gambling": false,
+      "gamblingSimulated": "NONE",
+      "horrorOrFearThemes": "NONE",
+      "matureOrSuggestiveThemes": "NONE",
+      "medicalOrTreatmentInformation": "NONE",
+      "profanityOrCrudeHumor": "NONE",
+      "sexualContentGraphicAndNudity": "NONE",
+      "sexualContentOrNudity": "NONE",
+      "violenceCartoonOrFantasy": "NONE",
+      "violenceRealistic": "NONE",
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+      "unrestrictedWebAccess": false,
+      "kidsAgeBand": null,
+      "ageRatingOverride": "NONE",
+      "koreaAgeRatingOverride": "NONE"
+    },
+    "release": {
+      "automaticRelease": false,
+      "phasedRelease": false
+    },
+    "review": {
+      "firstName": "Davide",
+      "lastName": "Espertini",
+      "email": "",
+      "phone": "",
+      "demoRequired": false,
+      "notes": "Color Spin is a single-player arcade game. No account or login is needed. Tap the left or right half of the screen to turn the shape so each ball hits the side of its color. The game runs fully offline; the only network use is the optional global leaderboard (anonymous random player id, the nickname the player types, and scores). Links to the developer's website open in Safari. There are no ads and no in-app purchases."
+    }
+  }
+}
