@@ -2,7 +2,8 @@
   "expo": {
     "name": "Color Spin",
     "slug": "color-spin",
-    "version": "1.2.0",
+    "owner": "espertini_dot_com",
+    "version": "1.6.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -49,6 +50,11 @@
         }
       ],
       "expo-sharing"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "a97d07ff-b8cf-429c-9926-6c7fbbffd583"
+      }
+    }
   }
 }
