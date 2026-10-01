@@ -42,3 +42,6 @@ yarn-error.*
 
 # built from ../web/index.html by scripts/build-game.mjs
 game-html.js
+
+# the App Store reviewers' contact, read by store.config.js
+store.review.local.json

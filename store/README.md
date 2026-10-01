@@ -7,7 +7,8 @@
 
 Tutto il materiale è pronto:
 
-- `mobile/store.config.json`: la scheda in italiano (`it`) e inglese (`en-US`). Contiene
+- `mobile/store.config.json`: la scheda in italiano (`it`) e inglese (`en-US`), letta
+  tramite `mobile/store.config.js` (vedi il passaggio 1). Contiene
   nome, sottotitolo, testo promozionale, descrizione, parole chiave, link, categoria
   (Giochi › Casual, Azione), classificazione per età, note per la revisione e uscita manuale.
   La carica EAS Metadata.
@@ -19,9 +20,12 @@ Tutto il materiale è pronto:
 
 Da `mobile/`, con l'ultima versione (`git pull`):
 
-1. **Completa il contatto per la revisione** in `store.config.json`, sotto `apple.review`:
-   `email` e `phone`, nel formato `+39 …`. Apple li usa solo se deve contattarti durante
-   la revisione. Poi controlla con `npx eas-cli@latest metadata:lint`.
+1. **Contatto per la revisione**: è in `mobile/store.review.local.json`, che resta solo sul
+   tuo computer (è escluso da git, perché il repository è pubblico):
+   `{ "email": "…", "phone": "+39 …" }`. `store.config.js` lo aggiunge alla scheda di
+   `store.config.json`. Su un altro computer ricrea il file, oppure usa le variabili
+   d'ambiente `APPLE_REVIEW_EMAIL` e `APPLE_REVIEW_PHONE`.
+   Controlla con `npx eas-cli@latest metadata:lint`.
 2. **Build iOS**: `npx eas-cli@latest build -p ios --profile production`.
    La prima volta chiede di accedere con l'Apple ID, e poi di creare certificato e profilo:
    rispondi di sì.
