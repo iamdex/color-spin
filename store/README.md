@@ -9,7 +9,8 @@ Tutto il materiale è pronto:
 
 - `mobile/store.config.json`: la scheda in italiano (`it`) e inglese (`en-US`), letta
   tramite `mobile/store.config.js` (vedi il passaggio 1). Contiene
-  nome, sottotitolo, testo promozionale, descrizione, parole chiave, link, categoria
+  nome ("Color Spin: Ruota e Abbina" / "Color Spin: Spin & Match": "Color Spin" da solo è già
+  usato da un'altra app; sotto l'icona resta "Color Spin"), sottotitolo, testo promozionale, descrizione, parole chiave, link, categoria
   (Giochi › Casual, Azione), classificazione per età, note per la revisione e uscita manuale.
   La carica EAS Metadata.
 - `store/app-store/it` e `store/app-store/en-US`: 6 screenshot per iPhone 6,9" (1320×2868)
