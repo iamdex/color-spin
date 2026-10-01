@@ -13,8 +13,10 @@ Tutto il materiale è pronto:
   usato da un'altra app; sotto l'icona resta "Color Spin"), sottotitolo, testo promozionale, descrizione, parole chiave, link, categoria
   (Giochi › Casual, Azione), classificazione per età, note per la revisione e uscita manuale.
   La carica EAS Metadata.
-- `store/app-store/it` e `store/app-store/en-US`: 6 screenshot per iPhone 6,9" (1320×2868)
-  e 6 per iPad 13" (2064×2752). EAS Metadata non carica gli screenshot: si trascinano
+- `store/app-store/it` e `store/app-store/en-US`, 6 screenshot per ciascuna misura:
+  - `iphone-*.jpg`: iPhone 6,9" (1320×2868);
+  - `iphone65-*.jpg`: iPhone 6,5" (1284×2778), se App Store Connect chiede questa misura;
+  - `ipad-*.jpg`: iPad 13" (2064×2752). EAS Metadata non carica gli screenshot: si trascinano
   in App Store Connect.
 
 ### Passaggi
@@ -34,8 +36,12 @@ Da `mobile/`, con l'ultima versione (`git pull`):
    Crea la scheda dell'app se non c'è e carica la build, che poi compare anche in TestFlight.
 4. **Scheda**: `npx eas-cli@latest metadata:push`, che carica testi e impostazioni.
 5. **Screenshot**: su App Store Connect apri l'app, poi la versione 1.7.0. Per ogni lingua
-   (Italiano e Inglese USA) trascina i 6 `iphone-*.jpg` nella sezione iPhone 6,9" e i 6
-   `ipad-*.jpg` nella sezione iPad 13", in ordine da 1 a 6.
+   (Italiano e Inglese USA), in ordine da 1 a 6, trascina:
+   - nella casella **iPhone 6,9"** i 6 `iphone-*.jpg`;
+   - se invece la casella è **iPhone 6,5"**, i 6 `iphone65-*.jpg` (Apple vuole il 6,9" oppure il 6,5");
+   - nella casella **iPad 13"** i 6 `ipad-*.jpg`.
+
+   Se un file viene rifiutato, controlla il nome della casella: ogni casella accetta solo le sue misure.
 6. **Privacy dell'app**: nella sezione "Privacy dell'app" dai le risposte della tabella qui sotto.
 7. **Prezzo e disponibilità**: gratis, in tutti i paesi.
 8. **Classificazione per età**: la parte principale la imposta già `metadata:push` (nessun
