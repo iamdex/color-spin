@@ -22,7 +22,27 @@ npm install
 npm start -- --tunnel                                    # try it with Expo Go on your phone
 npx eas-cli@latest build -p android --profile preview    # installable APK
 npx eas-cli@latest build -p android --profile production # AAB for the Play Store
+npx eas-cli@latest build -p ios --profile production     # for the App Store (asks for the Apple login)
 ```
+
+### Over-the-air updates (EAS Update)
+
+The whole game is JavaScript (`web/index.html`, bundled into `game-html.js`), so a change to the
+game reaches the store builds without a new review:
+
+```sh
+cd mobile
+npm run ota -- --message "What changed"           # production channel: the store builds
+npm run ota:preview -- --message "What changed"   # preview channel: the test APKs
+```
+
+The script rebuilds `game-html.js` first. Phones download the update in the background when the app
+starts and use it from the next launch.
+
+An update reaches only the builds with the same app version (`runtimeVersion` policy `appVersion`), so
+**keep `version` in `app.json` unchanged for OTA updates** (the game's own `VERSION` can move on).
+Change it only for a new store build, which a native change (a new Expo module, a new permission)
+always needs.
 
 ## Leaderboard server
 

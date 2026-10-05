@@ -13,6 +13,7 @@
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
+    "expo-updates": "~57.0.24",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
@@ -24,7 +25,9 @@
     "start": "node scripts/build-game.mjs && expo start",
     "android": "node scripts/build-game.mjs && expo start --android",
     "ios": "node scripts/build-game.mjs && expo start --ios",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "ota": "node scripts/build-game.mjs && npx --yes eas-cli@latest update --channel production --environment production",
+    "ota:preview": "node scripts/build-game.mjs && npx --yes eas-cli@latest update --channel preview --environment preview"
   },
   "private": true,
   "devDependencies": {
