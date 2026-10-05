@@ -13,9 +13,10 @@
 // are never sent back: a player id is what allows writing to that row.
 // A POST keeps the player's best score and always updates their name.
 // /v1/daily is the same board for one day of the daily challenge, /v1/sprint
-// and /v1/hardcore the ones of those modes.
+// and /v1/hardcore the ones of those modes. Friends and duels are in social.js.
 
 import { isOffensive } from './names.js';
+import { social } from './social.js';
 
 const TOP_SIZE = 10;
 const NAME_MAX = 14;           // same as the name field in the game
@@ -127,6 +128,7 @@ async function submit(db, kind, body) {
       db.prepare('UPDATE daily SET name = ? WHERE player = ? AND day >= ?').bind(name, player, since),
       db.prepare('UPDATE sprint SET name = ? WHERE id = ?').bind(name, player),
       db.prepare('UPDATE hardcore SET name = ? WHERE id = ?').bind(name, player),
+      db.prepare('UPDATE profiles SET name = ? WHERE player = ?').bind(name, player),
     ]);
   }
   return json(await board(db, kind, player, body));
@@ -137,8 +139,13 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     const kind = { '/v1/scores': 'scores', '/v1/daily': 'daily', '/v1/sprint': 'sprint', '/v1/hardcore': 'hardcore' }[url.pathname];
-    if (!kind) return fail(404, 'not found');
     try {
+      if (!kind) {
+        if (/^\/v1\/(profile|friends|duels)(\/|$)/.test(url.pathname)) {
+          return await social(request, url, env, { json, fail, cleanName, checkGame, validPlayer, validDay });
+        }
+        return fail(404, 'not found');
+      }
       if (request.method === 'GET') {
         const player = url.searchParams.get('player'), day = url.searchParams.get('day');
         if (kind === 'daily' && !validDay(day)) return fail(400, 'bad day');

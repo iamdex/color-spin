@@ -10,16 +10,18 @@
            user-select: none; -webkit-user-select: none; }
   canvas:focus { outline: none; }
   canvas:focus-visible { outline: 2px solid #ffd43b; outline-offset: -2px; }
-  #name { position: fixed; display: none; box-sizing: border-box; margin: 0; text-align: center;
+  #name, #code { position: fixed; display: none; box-sizing: border-box; margin: 0; text-align: center;
           font-family: Montserrat, "Arial Black", Arial, sans-serif; font-weight: 800; color: #fff;
           background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.3);
           outline: none; caret-color: #ffd43b; }
-  #name::placeholder { color: rgba(255,255,255,0.4); }
-  #name:focus { border-color: #ffd43b; }
+  #name::placeholder, #code::placeholder { color: rgba(255,255,255,0.4); }
+  #name:focus, #code:focus { border-color: #ffd43b; }
+  #code { text-transform: uppercase; letter-spacing: 0.12em; }
 </style>
 
 <canvas id="game" tabindex="0"></canvas>
 <input id="name" maxlength="14" autocomplete="nickname" enterkeyhint="done">
+<input id="code" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
 
 <script>
 (() => {
@@ -46,10 +48,11 @@
   const SHAPE_RADIUS = 120, TURN_TIME = 0.12;
   const BALL_RADIUS = 16, TRAIL_LEN = 12;
   const FONT = 'Montserrat, "Arial Black", Arial, sans-serif';
-  const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6, AWARDS: 7, SPLASH: 8 };
+  const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6, AWARDS: 7, SPLASH: 8,
+                  FRIENDS: 9, DUEL: 10 };
   const SPLASH_TIME = 3.3; // the opening: the logo builds itself, the title, the author
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
-  const VERSION = '1.8';
+  const VERSION = '1.9';
   // Hits in a row for x2, x3 and x4. A miss starts the count again.
   const COMBO_STEPS = [10, 25, 50];
   const JOLLY_POINTS = 3, SLOW_TIME = 5, SLOW_FACTOR = 0.5;
@@ -75,12 +78,13 @@
   const SPRINT_TIME = 60, SPRINT_MISS = 3, SPRINT_HEART = 5, SPRINT_BOOST = 2, ZEN_PACE = 3, HARDCORE_BOOST = 3;
   // Each mode's color and icon, the same as on the presentation site (site/):
   // SVG paths on a 24x24 grid, filled or stroked.
-  const MODE_COLORS = { classic: '#ffd43b', sprint: '#3bc9db', zen: '#51cf66', hardcore: '#ff4d6d' };
+  const MODE_COLORS = { classic: '#ffd43b', sprint: '#3bc9db', zen: '#51cf66', hardcore: '#ff4d6d', duel: '#4dabf7' };
   const MODE_ICONS = {
     classic: [['fill', 'M12 3l8 5v8l-8 5-8-5V8z']],
     sprint: [['stroke', 'M20 13a8 8 0 1 1-16 0a8 8 0 1 1 16 0'], ['stroke', 'M12 9v4l3 2M9 2h6']],
     zen: [['fill', 'M12 21c-5-2-8-6-8-11 3 0 6 1.5 8 4 2-2.5 5-4 8-4 0 5-3 9-8 11z']],
     hardcore: [['fill', 'M13 2L4 14h7l-1 8 9-12h-7z']],
+    duel: [['stroke', 'M5 19L19 5M5 5l14 14'], ['stroke', 'M3 15l6 6M15 21l6-6']],
   };
 
   // Colorblind help: a symbol for each color, in PALETTE's order.
@@ -137,6 +141,45 @@
       "daily_rank": "%d° OGGI",
       "daily_rank_of": "%d° OGGI SU %d",
       "share": "CONDIVIDI",
+      "friends": "AMICI",
+      "your_code": "IL TUO CODICE",
+      "invite": "INVITA",
+      "add": "AGGIUNGI",
+      "code_hint": "Codice amico",
+      "friends_board": "SFIDA DI OGGI E RECORD",
+      "col_today": "OGGI",
+      "col_best": "RECORD",
+      "no_friends": "Ancora nessun amico: invita qualcuno!",
+      "duels": "DUELLI",
+      "no_duels": "A fine partita tocca SFIDA per mandarla a un amico",
+      "duel_mine": "Il tuo duello · %d",
+      "duel_from": "Duello di %s · %d",
+      "duel_replies": "%d risposte · migliore %d",
+      "duel_no_replies": "Ancora nessuna risposta",
+      "duel_you": "Tu %d",
+      "friend_added": "%s è tra i tuoi amici!",
+      "code_unknown": "Codice non trovato",
+      "code_own": "Questo è il tuo codice!",
+      "offline_social": "Per gli amici serve la connessione",
+      "remove_friend": "Tocca di nuovo per togliere %s",
+      "duel": "SFIDA",
+      "duel_title": "DUELLO",
+      "duel_by": "%s TI SFIDA",
+      "duel_yours": "IL TUO DUELLO",
+      "duel_rule": "Stessa sequenza di palline: battilo!",
+      "duel_win": "HAI VINTO!",
+      "duel_lose": "HAI PERSO",
+      "duel_draw": "PAREGGIO",
+      "duel_score": "TU %d  ·  %s %d",
+      "duel_send_back": "RILANCIA",
+      "duel_finished": "%s HA FINITO A %d",
+      "duel_missing": "Duello non trovato",
+      "share_duel": "Ti sfido a Color Spin: ho fatto %d punti. Stessa partita, riesci a battermi? %s",
+      "share_invite": "Giochiamo a Color Spin! Aggiungimi come amico: %s",
+      "recovery": "LINK DI RECUPERO",
+      "share_recovery": "Il mio link di recupero di Color Spin (tienilo per te: riporta amici e classifiche su un altro telefono): %s",
+      "restored": "Profilo ripristinato",
+      "copied": "Link copiato",
       "mode_hardcore": "HARDCORE",
       "mode_info_hardcore": "Una vita sola, ritmo alto, niente cuori",
       "tab_hardcore": "HARDCORE",
@@ -262,6 +305,13 @@
           ]
         ],
         [
+          "AMICI E DUELLI",
+          [
+            "Invita gli amici con il tuo codice e",
+            "sfidali sulla stessa partita: SFIDA."
+          ]
+        ],
+        [
           "MODALITÀ",
           [
             "60 secondi: un errore costa 3 secondi,",
@@ -319,6 +369,45 @@
       "daily_rank": "#%d TODAY",
       "daily_rank_of": "#%d TODAY OF %d",
       "share": "SHARE",
+      "friends": "FRIENDS",
+      "your_code": "YOUR CODE",
+      "invite": "INVITE",
+      "add": "ADD",
+      "code_hint": "Friend code",
+      "friends_board": "TODAY'S CHALLENGE AND BEST",
+      "col_today": "TODAY",
+      "col_best": "BEST",
+      "no_friends": "No friends yet: invite someone!",
+      "duels": "DUELS",
+      "no_duels": "After a game, tap CHALLENGE to send it to a friend",
+      "duel_mine": "Your duel · %d",
+      "duel_from": "%s's duel · %d",
+      "duel_replies": "%d replies · best %d",
+      "duel_no_replies": "No replies yet",
+      "duel_you": "You %d",
+      "friend_added": "%s is now your friend!",
+      "code_unknown": "Code not found",
+      "code_own": "That's your own code!",
+      "offline_social": "Friends need a connection",
+      "remove_friend": "Tap again to remove %s",
+      "duel": "CHALLENGE",
+      "duel_title": "DUEL",
+      "duel_by": "%s CHALLENGES YOU",
+      "duel_yours": "YOUR DUEL",
+      "duel_rule": "Same balls, same order: beat it!",
+      "duel_win": "YOU WIN!",
+      "duel_lose": "YOU LOSE",
+      "duel_draw": "DRAW",
+      "duel_score": "YOU %d  ·  %s %d",
+      "duel_send_back": "SEND BACK",
+      "duel_finished": "%s FINISHED AT %d",
+      "duel_missing": "Duel not found",
+      "share_duel": "I challenge you at Color Spin: I scored %d. Same game, can you beat me? %s",
+      "share_invite": "Let's play Color Spin! Add me as a friend: %s",
+      "recovery": "RECOVERY LINK",
+      "share_recovery": "My Color Spin recovery link (keep it to yourself: it brings friends and leaderboards to another phone): %s",
+      "restored": "Profile restored",
+      "copied": "Link copied",
       "mode_hardcore": "HARDCORE",
       "mode_info_hardcore": "One life, a fast pace, no hearts",
       "tab_hardcore": "HARDCORE",
@@ -441,6 +530,13 @@
           [
             "Every day the same balls for everyone,",
             "with a special rule. Share your score!"
+          ]
+        ],
+        [
+          "FRIENDS AND DUELS",
+          [
+            "Invite friends with your code and",
+            "challenge them on the same game."
           ]
         ],
         [
@@ -1061,6 +1157,31 @@
     if (!nameShown) return;
     nameShown = false; nameInput.blur(); nameInput.style.display = 'none';
   }
+  // The friend code field on the friends page.
+  const codeInput = document.getElementById('code');
+  let codeShown = false;
+  codeInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { const c = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); hideCodeInput(); if (c) addFriend(c); }
+    else if (e.key === 'Escape') hideCodeInput();
+  });
+  codeInput.addEventListener('blur', () => setTimeout(hideCodeInput, 150));
+  function showCodeInput() {
+    codeInput.value = ''; codeInput.placeholder = tr('code_hint'); codeShown = true;
+    codeInput.style.display = 'block'; codeInput.focus();
+  }
+  function hideCodeInput() {
+    if (!codeShown) return;
+    codeShown = false; codeInput.blur(); codeInput.style.display = 'none';
+  }
+  function placeInput(el, f, alpha = 1) {
+    const c = canvas.getBoundingClientRect();
+    Object.assign(el.style, {
+      left: `${c.left + f.x * scale}px`, top: `${c.top + f.y * scale}px`,
+      width: `${f.w * scale}px`, height: `${f.h * scale}px`,
+      fontSize: `${30 * scale}px`, borderRadius: `${20 * scale}px`, padding: `0 ${20 * scale}px`,
+      opacity: String(alpha),
+    });
+  }
   // Right under the rank line; the buttons move down to make room for it.
   const nameField = () => ({ x: W / 2 - 170, y: H * 0.62 - 6, w: 340, h: 66 });
   function placeNameInput(alpha) {
@@ -1079,6 +1200,7 @@
     if (!db) {
       useLocalBoard(); refreshGlobal(); syncGlobal();
       for (const rb of Object.values(modeBoards)) { refreshRemote(rb); syncRemote(rb); }
+      initSocial();
       return;
     }
     board.db = db; board.user = user;
@@ -1343,6 +1465,125 @@
     if (retry || (!offline && rb.pending && rb.pending !== game)) setTimeout(() => syncRemote(rb), RETRY_GAP);
   }
 
+  // --- Friends and duels -------------------------------------------------------
+  // The server keeps a public friend code for each player, the friendships and
+  // the duels (server/src/social.js). Not on claude.ai, which can't reach it.
+  const SEEN_SOCIAL_KEY = 'color-spin-social-seen', RESTORED_KEY = 'color-spin-restored';
+  const social = {
+    status: 'idle', // idle | ok | offline
+    code: '', me: null, friends: [], duels: [], duel: null, unseen: false,
+    removing: null, // { code, time }: a first tap on a friend; a second one removes them
+  };
+  const socialOn = () => !!net.player && board.status !== 'ready' && board.status !== 'loading';
+  const formatCode = c => c ? `${c.slice(0, 4)}-${c.slice(4)}` : '';
+  const playUrl = query => `https://${SHARE_URL}/play/?${query}`;
+  async function api(path, body) {
+    const res = await fetch(`${API_URL}/${path}`, body ? {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player: net.player, ...body }),
+    } : undefined);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(data.error || 'error'), { code: data.error });
+    return data;
+  }
+  async function initSocial() {
+    if (!socialOn()) return;
+    try { social.code = (await api('profile', { name: playerName })).code; } catch {}
+    refreshSocial();
+  }
+  async function refreshSocial() {
+    if (!socialOn()) return;
+    try {
+      const [f, d] = await Promise.all([api(`friends?player=${net.player}&day=${today()}`), api(`duels?player=${net.player}`)]);
+      applyFriends(f); social.duels = d.duels; social.status = 'ok';
+    } catch { if (social.status !== 'ok') social.status = 'offline'; }
+    updateUnseen();
+  }
+  function applyFriends(f) {
+    social.me = f.me; social.friends = f.friends || [];
+    if (f.me) social.code = f.me.code;
+  }
+  // A dot on the friends icon: a friend beat you in today's challenge, or someone played your duel.
+  function seenMarks() {
+    const best = Math.max(-1, ...social.friends.map(f => f.today ?? -1));
+    const duels = Math.max(0, ...social.duels.filter(d => d.mine).map(d => d.played_at || 0));
+    return { beat: `${today()}:${best}`, duels };
+  }
+  function updateUnseen() {
+    const seen = loadJSON(SEEN_SOCIAL_KEY, {}), marks = seenMarks();
+    const beaten = social.me && social.me.today != null && social.friends.some(f => f.today != null && f.today > social.me.today);
+    social.unseen = (beaten && seen.beat !== marks.beat) || marks.duels > (seen.duels || 0);
+  }
+  function markSocialSeen() { saveJSON(SEEN_SOCIAL_KEY, seenMarks()); social.unseen = false; }
+  async function addFriend(code) {
+    if (!socialOn()) { showToast(tr('offline_social')); return; }
+    try {
+      const f = await api('friends', { code, day: today() });
+      applyFriends(f); showToast(tr('friend_added', f.added || tr('player'))); sfx.play('power'); haptic('success');
+    } catch (e) {
+      showToast(tr(e.code === 'unknown code' || e.code === 'bad code' ? 'code_unknown' : e.code === 'own code' ? 'code_own' : 'offline_social'));
+    }
+  }
+  async function removeFriend(code) {
+    try { applyFriends(await api('friends/remove', { code, day: today() })); sfx.play('click'); } catch { showToast(tr('offline_social')); }
+  }
+  async function loadDuel(id) {
+    if (!socialOn()) { showToast(tr('offline_social')); return; }
+    try {
+      social.duel = await api(`duels/${id}?player=${net.player}`);
+      hideNameInput(); hideCodeInput();
+      state = STATE.DUEL; fade = 0.6; sfx.play('click');
+    } catch { showToast(tr('duel_missing')); }
+  }
+  // After a classic game: send it to a friend. After a duel: send your own run back.
+  async function createDuel() {
+    if (!socialOn()) { showToast(tr('offline_social')); return; }
+    try {
+      const { id } = await api('duels', { name: playerName, seed: gameSeed, score, level, hits,
+        duration: Math.round(playTime * 10) / 10, ghost: ghostRec });
+      shareLink(tr('share_duel', score, playUrl(`duello=${id}`)));
+    } catch { showToast(tr('offline_social')); }
+  }
+  async function submitDuelResult() {
+    const id = social.duel && social.duel.id;
+    if (!id || !socialOn()) return;
+    try {
+      social.duel = await api(`duels/${id}`, { name: playerName, score, level, hits,
+        duration: Math.round(playTime * 10) / 10, ghost: ghostRec });
+    } catch {}
+  }
+  // Text with a link: the share sheet, or the clipboard.
+  async function shareLink(msg) {
+    if (app) { tellApp({ type: 'shareText', text: msg }); return; }
+    try { if (navigator.share) { await navigator.share({ text: msg }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(msg); showToast(tr('copied')); } catch { showToast(tr('share_failed')); }
+  }
+  const shareInvite = () => social.code ? shareLink(tr('share_invite', playUrl(`amico=${social.code}`))) : showToast(tr('offline_social'));
+  const shareRecovery = () => net.player ? shareLink(tr('share_recovery', playUrl(`recupero=${net.player}`))) : null;
+
+  // Links: ?amico=CODE, ?duello=ID, ?recupero=PLAYER on the web, colorspin://amico/CODE and so on in the app.
+  const linkQueue = [];
+  function handleLink(url) {
+    let u;
+    try { u = new URL(url, location.href); } catch { return; }
+    const q = u.searchParams, get = k => q.get(k) || '';
+    let friend = get('amico'), duel = get('duello'), restore = get('recupero');
+    if (u.protocol === 'colorspin:') {
+      const [kind, value = ''] = `${u.host}${u.pathname}`.split('/').filter(Boolean);
+      if (kind === 'amico') friend = value; else if (kind === 'duello') duel = value; else if (kind === 'recupero') restore = value;
+    }
+    if (/^[0-9a-f]{32}$/.test(restore) && restore !== net.player) {
+      try { localStorage.setItem(PLAYER_KEY, restore); localStorage.setItem(RESTORED_KEY, '1'); } catch {}
+      location.replace(location.pathname);
+      return;
+    }
+    if (friend) addFriend(friend.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+    if (duel) loadDuel(duel.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+  }
+  if (/[?&](amico|duello|recupero)=/.test(location.search)) {
+    linkQueue.push(location.href);
+    try { history.replaceState(null, '', location.pathname); } catch {}
+  }
+
   // --- Sharing --------------------------------------------------------------
   // A square picture of the game just played: the shape it reached, the score
   // and, for the daily challenge, its number, rule and rank.
@@ -1472,6 +1713,9 @@
   // hits: balls matched (they set the level); score adds the combo and bonus points.
   let hits = 0, bestStreak = 0, comboPop = 0, slowTime = 0, hint = null;
   // calm: see CALM_BALLS; the rest is combo feedback (flash, zoom kick, every-10 pop, lost combo).
+  // gameSeed: classic games are seeded too, so any of them can become a duel;
+  // ghostRec: the score at every second of play, the duel's ghost.
+  let gameSeed = '', ghostRec = [0];
   let calm = 0, comboFlash = 0, comboColor = WHITE, kick = 0, milestone = null, comboLost = null;
   // mode: 'classic' or 'daily'; rng drives the balls (seeded in the daily challenge).
   let mode = 'classic', twist = NO_TWIST, rng = Math.random, gameDay = today(), maxLives = MAX_LIVES;
@@ -1507,6 +1751,11 @@
     balls = []; clearFx();
     state = STATE.MENU; shape.setup(MENU_SIDES); menuTurnTimer = 1; fade = 1;
     awardQueue.length = 0; // the awards page lists them anyway
+    hideCodeInput();
+    if (social.removing) social.removing = null;
+    // Invite and duel links wait for the opening to finish.
+    if (linkQueue.length) { const links = linkQueue.splice(0); setTimeout(() => links.forEach(handleLink), 400); }
+    refreshSocial();
     music.playMenu();
   }
 
@@ -1514,8 +1763,12 @@
     hideNameInput();
     mode = m; gameDay = today();
     twist = mode === 'daily' ? twistFor(gameDay) : NO_TWIST;
-    rng = mode === 'daily' ? seededRandom(`color-spin-${gameDay}`) : Math.random;
+    if (mode === 'duel') gameSeed = social.duel.seed;
+    else if (mode === 'classic') gameSeed = Array.from({ length: 10 }, () => 'abcdefghijkmnpqrstuvwxyz23456789'[Math.random() * 32 | 0]).join('');
+    rng = mode === 'daily' ? seededRandom(`color-spin-${gameDay}`)
+      : mode === 'classic' || mode === 'duel' ? seededRandom(`classic-${gameSeed}`) : Math.random;
     maxLives = mode === 'hardcore' ? 1 : twist.lives || MAX_LIVES;
+    ghostRec = [0];
     balls = []; clearFx();
     score = 0; lives = maxLives; level = 1; newBest = false; spawnTimer = 1;
     hits = 0; bestStreak = 0; comboPop = 0; slowTime = 0; hint = null;
@@ -1536,11 +1789,11 @@
     } else if (mode === 'zen' || mode === 'hardcore') {
       hint = { title: tr(`mode_${mode}`), line: tr(`mode_info_${mode}`), time: 3.5 };
       if (mode === 'hardcore') refreshRemote(hardcore);
-    } else showBanner(tr('banner_level', 1));
+    } else showBanner(mode === 'duel' ? tr('duel_title') : tr('banner_level', 1));
   }
   // Zen keeps the music calm: the first tempo and at most three instruments more.
   const musicLevel = () => mode === 'zen' ? [1, Math.min(tier(level), 2)] : [level, tier(level)];
-  const hasLives = () => mode === 'classic' || mode === 'daily' || mode === 'hardcore';
+  const hasLives = () => mode === 'classic' || mode === 'daily' || mode === 'hardcore' || mode === 'duel';
 
   const tier = lvl => Math.min(Math.floor((lvl - 1) / LEVELS_PER_SIDE), MAX_SIDES - MIN_SIDES);
   const sidesForLevel = lvl => MIN_SIDES + tier(lvl);
@@ -1710,6 +1963,8 @@
     for (const b of balls) b.dead = true;
     for (const c of shape.colors) burst(0, 0, c, 10, 450);
     if (slowTime > 0) { slowTime = 0; music.setSlow(false); }
+    // A duel only counts against its ghost: no records, no boards.
+    if (mode === 'duel') { submitDuelResult(); return; }
     if (mode === 'daily') {
       // The daily challenge has its own records and board.
       board.localHighlight = -1;
@@ -1772,9 +2027,9 @@
 
   const settingsButton = () => ({ x: W - 92, y: 24, w: 68, h: 68 });
   // Music, sounds, language, back.
-  // Music, sounds, language, vibration, symbols, back.
-  const settingsButtons = () => [0, 1, 2, 3, 4, 5].map(i =>
-    ({ x: W / 2 - 260, y: H * 0.26 + i * 100 + (i === 5 ? 44 : 0), w: 520, h: 82 }));
+  // Music, sounds, language, vibration, symbols (with their preview under it), recovery link, back.
+  const settingsButtons = () => [0, 1, 2, 3, 4, 5, 6].map(i =>
+    ({ x: W / 2 - 260, y: H * 0.2 + i * 94 + (i >= 5 ? 50 : 0) + (i === 6 ? 28 : 0), w: 520, h: 78 }));
   let linkRect = { x: 0, y: 0, w: 0, h: 0 }; // the site link on the about screen, set when drawn
   const infoButton = () => ({ x: 24, y: 24, w: 68, h: 68 });
   // Top center, between the score and the lives.
@@ -1790,12 +2045,19 @@
   ];
 
   const grow = (r, k) => ({ x: r.x - k, y: r.y - k, w: r.w + 2 * k, h: r.h + 2 * k });
-  // Play again; then share and menu side by side.
+  // Play again; then (after a classic game) challenge a friend and share, or
+  // (after a duel) send it back; and the menu.
   const gameOverButtons = () => {
-    const y = H * 0.62 + (nameShown ? NAME_ROW : 0);
-    return [{ x: W / 2 - 210, y, w: 420, h: 88 }, { x: W / 2 + 8, y: y + 108, w: 202, h: 88 },
-      { x: W / 2 - 210, y: y + 108, w: 202, h: 88 }];
+    const y = H * 0.62 + (nameShown ? NAME_ROW : 0), on = socialOn();
+    const replay = { id: 'replay', x: W / 2 - 210, y, w: 420, h: 88 };
+    if (mode === 'classic' && on) return [replay, { id: 'duel', x: W / 2 - 210, y: y + 108, w: 202, h: 88 },
+      { id: 'share', x: W / 2 + 8, y: y + 108, w: 202, h: 88 }, { id: 'menu', x: W / 2 - 210, y: y + 216, w: 420, h: 76 }];
+    const second = mode === 'duel' ? (on ? 'sendback' : null) : 'share';
+    return [replay, ...(second ? [{ id: second, x: W / 2 + 8, y: y + 108, w: 202, h: 88 }] : []),
+      { id: 'menu', x: W / 2 - 210, y: y + 108, w: second ? 202 : 420, h: 88 }];
   };
+  // Friends icon, left of the leaderboard's.
+  const friendsButton = () => ({ x: W - 260, y: 24, w: 68, h: 68 });
   const hit = (r, p) => p && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 
   function handle(action, pos) {
@@ -1813,6 +2075,9 @@
         boardTab = BOARD_TABS.includes(menuMode) ? menuMode : 'all';
         if (board.status === 'global' || board.status === 'local') { refreshGlobal(); syncGlobal(); }
         for (const rb of Object.values(modeBoards)) { refreshRemote(rb); syncRemote(rb); }
+      } else if (action === 'tap' && socialOn() && hit(friendsButton(), pos)) {
+        sfx.play('click'); state = STATE.FRIENDS; fade = 0.6; pageScroll = pageVel = 0;
+        markSocialSeen(); refreshSocial();
       } else if (action === 'tap' && hit(menuButtons()[5], pos)) {
         sfx.play('click'); state = STATE.AWARDS; fade = 0.6; pageScroll = pageVel = 0;
       } else if (action === 'tap' && hit(menuButtons()[2], pos)) {
@@ -1853,10 +2118,13 @@
       }
     } else if (state === STATE.GAME_OVER) {
       if (gameOverTime < 0.6) return;
-      const b = gameOverButtons();
-      if (action === 'confirm' || hit(b[0], pos)) { sfx.play('click'); start(); }
-      else if (hit(b[1], pos)) { sfx.play('click'); share(); }
-      else if (action === 'back' || hit(b[2], pos)) { sfx.play('click'); goToMenu(); }
+      const id = action === 'confirm' ? 'replay' : action === 'back' ? 'menu' : (gameOverButtons().find(r => hit(r, pos)) || {}).id;
+      if (!id) return;
+      sfx.play('click');
+      if (id === 'replay') start();
+      else if (id === 'share') share();
+      else if (id === 'duel' || id === 'sendback') createDuel();
+      else if (id === 'menu') goToMenu();
     } else if (state === STATE.SETTINGS) {
       const rows = settingsButtons();
       if (action === 'tap' && hit(rows[0], pos)) toggleMusic();
@@ -1864,7 +2132,8 @@
       else if (action === 'tap' && hit(rows[2], pos)) toggleLanguage();
       else if (action === 'tap' && hit(rows[3], pos)) toggleVibrate();
       else if (action === 'tap' && hit(rows[4], pos)) toggleSymbols();
-      else if (action === 'back' || (action === 'tap' && hit(rows[5], pos))) {
+      else if (action === 'tap' && socialOn() && hit(rows[5], pos)) { sfx.play('click'); shareRecovery(); }
+      else if (action === 'back' || (action === 'tap' && hit(rows[6], pos))) {
         sfx.play('click'); state = STATE.MENU; fade = 0.6;
       }
     } else if (state === STATE.LEADERBOARD && action === 'tap' && hit(reportRect, pos)) {
@@ -1876,6 +2145,14 @@
       if (rb) refreshRemote(rb);
     } else if (scrolls() && (action === 'up' || action === 'down')) {
       pageVel = 0; pageScroll = clamp(pageScroll + (action === 'up' ? -120 : 120), 0, pageMax);
+    } else if (state === STATE.FRIENDS && action === 'tap' && pos.y < pageBottom() &&
+      friendRects.some(o => hit(o.r, { x: pos.x, y: pos.y + pageScroll }))) {
+      friendTap(friendRects.find(o => hit(o.r, { x: pos.x, y: pos.y + pageScroll })));
+    } else if (state === STATE.DUEL) {
+      const b = duelButtons(), on = id => hit(b.find(r => r.id === id), pos);
+      if (action === 'confirm' || (action === 'tap' && on('play'))) start('duel');
+      else if (action === 'tap' && on('share')) shareLink(tr('share_duel', social.duel.owner.score, playUrl(`duello=${social.duel.id}`)));
+      else if (action === 'back' || (action === 'tap' && on('menu'))) { sfx.play('click'); goToMenu(); }
     } else if (state === STATE.AWARDS && action === 'tap' && pos.y < pageBottom() &&
       lookRects.some(o => hit(o.r, { x: pos.x, y: pos.y + pageScroll }))) {
       pickLook(lookRects.find(o => hit(o.r, { x: pos.x, y: pos.y + pageScroll })));
@@ -1893,7 +2170,7 @@
   };
   // The About and awards pages scroll: there a tap is a release that didn't drag.
   let drag = null;
-  const scrolls = () => state === STATE.ABOUT || state === STATE.AWARDS;
+  const scrolls = () => state === STATE.ABOUT || state === STATE.AWARDS || state === STATE.FRIENDS;
   const pageBottom = () => H * 0.9 - 56;
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
@@ -1938,7 +2215,7 @@
     p: 'pause', P: 'pause', i: 'info', I: 'info', l: 'language', L: 'language',
   };
   window.addEventListener('keydown', e => {
-    if (e.ctrlKey || e.metaKey || e.altKey || e.target === nameInput) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target === nameInput || e.target === codeInput) return;
     // Up and down scroll the About page.
     const scroll = scrolls() && { ArrowUp: 'up', ArrowDown: 'down' }[e.key];
     if (scroll) { e.preventDefault(); handle(scroll); return; }
@@ -1969,6 +2246,8 @@
     else window.open(url, '_blank', 'noopener');
   }
   window.colorSpinApp = {
+    // An invite or duel link that opened the app (colorspin://…).
+    link(url) { if (state === STATE.SPLASH) linkQueue.push(url); else handleLink(url); },
     background() { onLeave(); sfx.ctx?.suspend(); },
     foreground() { sfx.ctx?.resume(); },
     // Back works like Esc, except that on the main menu it closes the app.
@@ -2013,6 +2292,7 @@
     if (comboLost && (comboLost.t -= dt) <= 0) comboLost = null;
     bannerTime = Math.max(bannerTime - dt, 0);
     if (toast && (toast.time -= dt) <= 0) toast = null;
+    if (social.removing && (social.removing.time -= dt) <= 0) social.removing = null;
     if (awardQueue.length && (awardQueue[0].time -= dt) <= 0) { awardQueue.shift(); if (awardQueue.length) sfx.play('figure'); }
     modeFlash = modeFlash > 0 ? Math.max(modeFlash - dt * 5, 0) : Math.min(modeFlash + dt * 5, 0);
     if (pageVel && !drag) {
@@ -2054,6 +2334,7 @@
       if (menuTurnTimer <= 0) { shape.rotateStep(); menuTurnTimer = 0.9; }
     } else if (state === STATE.PLAYING) {
       playTime += dt;
+      while (ghostRec.length <= Math.floor(playTime) && ghostRec.length < 1800) ghostRec.push(score);
       spawnTimer -= dt * k;
       if (hint && (hint.time -= dt) <= 0) hint = null;
       if (slowTime > 0 && (slowTime -= dt) <= 0) { slowTime = 0; music.setSlow(false); }
@@ -2293,6 +2574,24 @@
     if (out > 0) { ctx.fillStyle = rgba(BG_BOTTOM, out); ctx.fillRect(0, 0, W, H); }
   }
 
+  // Under the pause button: how far ahead (green) or behind (red) the ghost you are.
+  function drawGhost() {
+    const o = social.duel.owner, gh = o.ghost, name = (o.name || tr('player')).toUpperCase();
+    const ended = playTime >= gh.length, g = ended ? o.score : gh[Math.floor(playTime)] ?? 0, d = score - g;
+    const c = d > 0 ? PALETTE[3] : d < 0 ? PALETTE[0] : WHITE, y = 132;
+    ctx.font = `800 34px ${FONT}`;
+    const label = String(Math.abs(d)), w = ctx.measureText(label).width, x = W / 2 - (w + 26) / 2;
+    if (d) {
+      ctx.beginPath(); ctx.fillStyle = rgba(c);
+      if (d > 0) { ctx.moveTo(x, y - 6); ctx.lineTo(x + 18, y - 6); ctx.lineTo(x + 9, y - 24); }
+      else { ctx.moveTo(x, y - 24); ctx.lineTo(x + 18, y - 24); ctx.lineTo(x + 9, y - 6); }
+      ctx.fill();
+    }
+    text(x + 26, y, label, 34, c);
+    centered(ended ? tr('duel_finished', name, o.score) : `${name}  ${g}`, y + 28, 16, WHITE, 0.55);
+    iconText('duel', W - 24, 104, tr('duel_title'), 18, hex(MODE_COLORS.duel), 0.85, 'right');
+  }
+
   // "COMBO 37 LOST", its letters falling apart.
   function drawComboLost() {
     const t = comboLost.t / 1.4, str = tr('combo_lost', comboLost.n), size = 40, y0 = H * 0.36;
@@ -2368,6 +2667,125 @@
     circle(cx, cy + 3, 12, col);
     drawSymbol('star', cx, cy + 3, 8, rgba(BG_TOP));
   }
+  // Two people; a red dot when a friend beat you or played your duel.
+  function drawFriendsIcon(r, dot) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2, col = 'rgba(255,255,255,0.75)';
+    circle(cx - 8, cy - 7, 6.5, col); circle(cx + 9, cy - 9, 5.5, 'rgba(255,255,255,0.5)');
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx - 8, cy + 14, 12, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.beginPath(); ctx.arc(cx + 9, cy + 10, 10, Math.PI, 0); ctx.fill();
+    if (dot) { circle(cx + 18, cy - 18, 8, rgba(PALETTE[0])); }
+  }
+  // The friends page: your code, invite and add; today's challenge and the best
+  // scores of you and your friends; your duels and the ones you played.
+  let friendRects = [];
+  function friendTap(o) {
+    if (o.kind === 'invite') { sfx.play('click'); shareInvite(); }
+    else if (o.kind === 'add') { sfx.play('click'); showCodeInput(); }
+    else if (o.kind === 'duel') loadDuel(o.id);
+    else if (o.kind === 'friend') {
+      if (social.removing && social.removing.code === o.code && social.removing.time > 0) { social.removing = null; removeFriend(o.code); }
+      else { social.removing = { code: o.code, time: 3 }; showToast(tr('remove_friend', o.name)); }
+    }
+  }
+  function drawFriends() {
+    ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
+    const bottom = pageBottom();
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, bottom); ctx.clip(); ctx.translate(0, -pageScroll);
+    friendRects = [];
+    centered(tr('friends'), H * 0.1, 60, WHITE);
+    let y = H * 0.1 + 64;
+    centered(tr('your_code'), y, 18, WHITE, 0.5);
+    const pill = { x: W / 2 - 190, y: y + 18, w: 380, h: 76 };
+    roundRect(pill, 38); ctx.fillStyle = 'rgba(255,255,255,0.07)'; ctx.fill();
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '6px';
+    centered(social.code ? formatCode(social.code) : '····-····', pill.y + 51, 38, PALETTE[2]);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    y = pill.y + pill.h + 22;
+    const inv = { x: W / 2 - 250, y, w: 240, h: 76 }, add = { x: W / 2 + 10, y, w: 240, h: 76 };
+    button(inv, tr('invite'), PALETTE[2], 1, INK); button(add, tr('add'), WHITE, 0.1, WHITE);
+    friendRects.push({ r: inv, kind: 'invite' }, { r: add, kind: 'add' });
+    if (codeShown) placeInput(codeInput, { x: W / 2 - 190, y: y + 90 - pageScroll, w: 380, h: 70 });
+    y += codeShown ? 200 : 130;
+
+    // You and your friends: today's challenge and the classic best.
+    const w = W - 80;
+    text(40, y, tr('friends_board'), 20, PALETTE[2]);
+    text(40 + w - 140, y, tr('col_today'), 15, WHITE, 0.5, 'right');
+    text(40 + w - 16, y, tr('col_best'), 15, WHITE, 0.5, 'right');
+    y += 18;
+    const rows = [...(social.me ? [{ ...social.me, mine: true }] : []), ...social.friends]
+      .sort((a, b) => (b.today ?? -1) - (a.today ?? -1) || (b.classic ?? -1) - (a.classic ?? -1));
+    if (social.status === 'offline' && !social.friends.length) { centered(tr('offline_social'), y + 50, 22, WHITE, 0.6); y += 90; }
+    else if (!social.friends.length) { centered(tr('no_friends'), y + 50, 22, WHITE, 0.6); y += 90; }
+    if (social.friends.length) rows.forEach((f, i) => {
+      const r = { x: 40, y, w, h: 58 }, removing = social.removing && social.removing.code === f.code && social.removing.time > 0;
+      ctx.fillStyle = f.mine ? rgba(PALETTE[2], 0.16) : removing ? rgba(PALETTE[0], 0.2) : 'rgba(255,255,255,0.05)';
+      roundRect(r, 14); ctx.fill();
+      circle(74, y + 29, 16, rgba(PALETTE[i % PALETTE.length]));
+      ctx.font = `800 18px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = rgba(INK);
+      ctx.fillText(String(i + 1), 74, y + 30);
+      let name = (f.name || tr('player')) + (f.mine ? tr('you') : '');
+      ctx.font = `800 22px ${FONT}`;
+      while (name.length > 3 && ctx.measureText(name).width > w - 300) name = name.slice(0, -2) + '…';
+      text(104, y + 37, name, 22, WHITE);
+      text(40 + w - 140, y + 37, f.today != null ? String(f.today) : '—', 24, f.today != null ? PALETTE[4] : WHITE, f.today != null ? 1 : 0.3, 'right');
+      text(40 + w - 16, y + 37, f.classic != null ? String(f.classic) : '—', 24, WHITE, f.classic != null ? 1 : 0.3, 'right');
+      if (!f.mine) friendRects.push({ r, kind: 'friend', code: f.code, name: f.name || tr('player') });
+      y += 66;
+    });
+
+    // Duels.
+    y += 34;
+    text(40, y, tr('duels'), 20, hex(MODE_COLORS.duel));
+    y += 18;
+    if (!social.duels.length) { centered(tr('no_duels'), y + 44, 19, WHITE, 0.55); y += 80; }
+    for (const d of social.duels) {
+      const r = { x: 40, y, w, h: 66 };
+      ctx.fillStyle = 'rgba(255,255,255,0.05)'; roundRect(r, 14); ctx.fill();
+      drawModeIcon('duel', 72, y + 33, 26, hex(MODE_COLORS.duel));
+      const title = d.mine ? tr('duel_mine', d.score) : tr('duel_from', d.name || tr('player'), d.score);
+      const sub = d.mine ? (d.players ? tr('duel_replies', d.players, d.best) : tr('duel_no_replies')) : tr('duel_you', d.my_score ?? 0);
+      text(104, y + 29, title, 20, WHITE);
+      text(104, y + 54, sub, 16, WHITE, 0.55);
+      friendRects.push({ r, kind: 'duel', id: d.id });
+      y += 74;
+    }
+    ctx.restore();
+    pageMax = Math.max(0, y + 30 - bottom);
+    pageScroll = Math.min(pageScroll, pageMax);
+    if (pageScroll < pageMax - 1) {
+      const g = ctx.createLinearGradient(0, bottom - 90, 0, bottom);
+      g.addColorStop(0, rgba(BG_BOTTOM, 0)); g.addColorStop(1, rgba(BG_BOTTOM, 0.95));
+      ctx.fillStyle = g; ctx.fillRect(0, bottom - 90, W, 90);
+    }
+    centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
+  }
+
+  // A duel before playing it: who challenges you and with what; the replies so far.
+  const duelButtons = () => {
+    const y = H * 0.7, mine = social.duel && social.duel.mine;
+    return [{ id: 'play', x: W / 2 - 210, y, w: 420, h: 92 },
+      ...(mine ? [{ id: 'share', x: W / 2 + 8, y: y + 112, w: 202, h: 84 }] : []),
+      { id: 'menu', x: W / 2 - 210, y: y + 112, w: mine ? 202 : 420, h: 84 }];
+  };
+  function drawDuel() {
+    ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
+    const d = social.duel;
+    if (!d) return;
+    const name = (d.owner.name || tr('player')).toUpperCase();
+    iconText('duel', W / 2, H * 0.14, tr('duel_title'), 30, hex(MODE_COLORS.duel));
+    centered(d.mine ? tr('duel_yours') : tr('duel_by', name), H * 0.22, 40, WHITE);
+    centered(String(d.owner.score), H * 0.36, 130, PALETTE[2]);
+    centered(tr('points_level', d.owner.level, '·').replace(/\s*·\s*COMBO.*$/, ''), H * 0.36 + 46, 22, WHITE, 0.55);
+    centered(tr('duel_rule'), H * 0.36 + 100, 24, WHITE, 0.8);
+    d.results.slice(0, 4).forEach((r, i) => {
+      const y = H * 0.36 + 150 + i * 46;
+      centered(`${i + 1}.  ${r.name || tr('player')}${r.you ? tr('you') : ''}   ${r.score}`, y, 22, r.you ? PALETTE[2] : WHITE, r.you ? 1 : 0.7);
+    });
+    const look = { play: [tr('play'), PALETTE[2], 1, INK], share: [tr('share'), PALETTE[4], 1, INK], menu: [tr('menu'), WHITE, 0.1, WHITE] };
+    for (const r of duelButtons()) button(r, ...look[r.id]);
+  }
+
   // A small padlock.
   function drawLock(x, y) {
     ctx.strokeStyle = ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 3;
@@ -2494,6 +2912,7 @@
     drawTrophyIcon(lb);
     drawInfoIcon(infoButton());
     drawMedalIcon(menuButtons()[5]);
+    if (socialOn()) drawFriendsIcon(friendsButton(), social.unseen);
   }
 
   // Curved arrow; dir 1 = clockwise, -1 = counter-clockwise (mirrored).
@@ -2693,7 +3112,7 @@
 
   function drawSettings() {
     ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
-    centered(tr('settings'), H * 0.2, 60, WHITE);
+    centered(tr('settings'), H * 0.13, 60, WHITE);
     const rows = settingsButtons();
     const values = [
       [tr('music'), music.muted ? tr('off') : tr('on')],
@@ -2708,7 +3127,8 @@
       const x = W / 2 - 3.5 * 40 + i * 40, y = rows[4].y + rows[4].h + 28;
       circle(x, y, 15, rgba(PALETTE[i])); drawSymbol(k, x, y, 10, rgba(INK, 0.85));
     });
-    button(rows[5], tr('back'), PALETTE[2], 1, INK);
+    if (socialOn()) button(rows[5], tr('recovery'), WHITE, 0.1, WHITE);
+    button(rows[6], tr('back'), PALETTE[2], 1, INK);
   }
 
   function drawPlay() {
@@ -2739,6 +3159,7 @@
     if (mode === 'daily') text(W - 24, 104, tr('daily', dayNumber(gameDay)), 18, PALETTE[4], 0.85, 'right');
     if (mode === 'zen') iconText('zen', W - 28, 72, tr('mode_zen'), 26, hex(MODE_COLORS.zen), 0.7, 'right');
     if (mode === 'hardcore') iconText('hardcore', W - 24, 104, tr('mode_hardcore'), 18, hex(MODE_COLORS.hardcore), 0.85, 'right');
+    if (mode === 'duel' && social.duel) drawGhost();
     if (mode === 'sprint') {
       // Time left, red in the last 10 seconds, with a bar under it.
       const secs = Math.ceil(clock), low = clock < 10;
@@ -2805,6 +3226,17 @@
     const t = clamp(gameOverTime * 3, 0, 1);
     ctx.fillStyle = rgba(BG_BOTTOM, 0.8 * t); ctx.fillRect(0, 0, W, H);
     const slide = (1 - t) * 40;
+    if (mode === 'duel' && social.duel) {
+      // The verdict against the duel's owner.
+      const o = social.duel.owner, name = (o.name || tr('player')).toUpperCase();
+      const res = score > o.score ? 'win' : score < o.score ? 'lose' : 'draw';
+      iconText('duel', W / 2, H * 0.27 - 76 + slide, tr('duel_title'), 24, hex(MODE_COLORS.duel), t);
+      centered(tr(`duel_${res}`), H * 0.27 + slide, 68, res === 'win' ? PALETTE[3] : res === 'lose' ? PALETTE[0] : PALETTE[2], t);
+      centered(String(score), H * 0.41 + slide, 130, WHITE, t);
+      centered(tr('duel_score', score, name, o.score), H * 0.41 + 50 + slide, 24, WHITE, 0.7 * t);
+      drawGameOverButtons();
+      return;
+    }
     if (mode === 'daily') centered(`${tr('daily', dayNumber(gameDay))}  ·  ${twistText(twist)[0]}`, H * 0.27 - 76 + slide, 24, PALETTE[4], t);
     if (mode === 'sprint' || mode === 'hardcore') iconText(mode, W / 2, H * 0.27 - 76 + slide, tr(`mode_${mode}`), 24, hex(MODE_COLORS[mode]), t);
     centered(tr(mode === 'sprint' ? 'time_up' : 'game_over'), H * 0.27 + slide, 68, PALETTE[0], t);
@@ -2819,12 +3251,14 @@
     else if (score > 0 && board.status === 'ready' && !board.myId)
       centered(tr('sign_in'), H * 0.52 + 44 + slide, 20, WHITE, 0.5 * t);
     if (nameShown) placeNameInput(t);
-    if (gameOverTime > 0.6) {
-      const b = gameOverButtons();
-      button(b[0], tr('replay'), PALETTE[2], 1, INK);
-      button(b[1], tr('share'), PALETTE[4], 1, INK);
-      button(b[2], tr('menu'), WHITE, 0.1, WHITE);
-    }
+    drawGameOverButtons();
+  }
+  function drawGameOverButtons() {
+    if (gameOverTime <= 0.6) return;
+    const look = { replay: [tr('replay'), PALETTE[2], 1, INK], share: [tr('share'), PALETTE[4], 1, INK],
+      duel: [tr('duel'), hex(MODE_COLORS.duel), 1, INK], sendback: [tr('duel_send_back'), hex(MODE_COLORS.duel), 1, INK],
+      menu: [tr('menu'), WHITE, 0.1, WHITE] };
+    for (const r of gameOverButtons()) button(r, ...look[r.id]);
   }
 
   function draw() {
@@ -2843,6 +3277,8 @@
     else if (state === STATE.ABOUT) drawAbout();
     else if (state === STATE.SETTINGS) drawSettings();
     else if (state === STATE.AWARDS) drawAwards();
+    else if (state === STATE.FRIENDS) drawFriends();
+    else if (state === STATE.DUEL) drawDuel();
     else if (state === STATE.SPLASH) { /* drawn with the shape, above */ }
     else {
       drawPlay();
@@ -2878,6 +3314,7 @@
   }
 
   applyLanguage();
+  try { if (localStorage.getItem(RESTORED_KEY)) { localStorage.removeItem(RESTORED_KEY); showToast(tr('restored')); } } catch {}
   startSplash();
   requestAnimationFrame(frame);
   initBoard();

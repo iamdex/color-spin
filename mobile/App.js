@@ -1,11 +1,11 @@
 // The app is the web game (web/index.html, bundled into game-html.js) in a
 // full-screen WebView. The native side only keeps the screen awake, opens
-// links in the phone's browser, shares the page's score picture, plays its
-// haptics and forwards
+// links in the phone's browser, shares the page's score picture and links,
+// plays its haptics, hands it the colorspin:// links that open the app and forwards
 // the back button and background events to the page (window.colorSpinApp in
 // web/index.html).
 import { useEffect, useRef } from 'react';
-import { AppState, BackHandler, Linking, StyleSheet } from 'react-native';
+import { AppState, BackHandler, Linking, Share, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -41,11 +41,21 @@ export default function App() {
   useKeepAwake();
   const web = useRef(null);
   const call = hook => web.current?.injectJavaScript(`window.colorSpinApp?.${hook}(); true;`);
+  // Invite and duel links (colorspin://amico/CODE, colorspin://duello/ID): the
+  // one that launched the app once the page is loaded, the later ones right away.
+  const loaded = useRef(false), pendingLink = useRef(null);
+  const sendLink = url => {
+    if (!url || !url.startsWith('colorspin://')) return;
+    if (!loaded.current) { pendingLink.current = url; return; }
+    web.current?.injectJavaScript(`window.colorSpinApp?.link?.(${JSON.stringify(url)}); true;`);
+  };
 
   useEffect(() => {
     const appState = AppState.addEventListener('change', s => call(s === 'active' ? 'foreground' : 'background'));
     const back = BackHandler.addEventListener('hardwareBackPress', () => { call('back'); return true; });
-    return () => { appState.remove(); back.remove(); };
+    const links = Linking.addEventListener('url', ({ url }) => sendLink(url));
+    Linking.getInitialURL().then(sendLink).catch(() => {});
+    return () => { appState.remove(); back.remove(); links.remove(); };
   }, []);
 
   function onMessage(e) {
@@ -54,6 +64,7 @@ export default function App() {
     if (msg.type === 'open' && /^https:\/\//.test(msg.url)) Linking.openURL(msg.url);
     else if (msg.type === 'exit') BackHandler.exitApp();
     else if (msg.type === 'share') shareImage(msg.image).catch(() => {});
+    else if (msg.type === 'shareText' && typeof msg.text === 'string') Share.share({ message: msg.text }).catch(() => {});
     else if (msg.type === 'haptic' && HAPTICS[msg.kind]) HAPTICS[msg.kind]().catch(() => {});
   }
 
@@ -67,6 +78,12 @@ export default function App() {
           source={{ html: gameHtml, baseUrl: BASE_URL }}
           originWhitelist={['*']}
           onMessage={onMessage}
+          onLoadEnd={() => {
+            loaded.current = true;
+            const url = pendingLink.current;
+            pendingLink.current = null;
+            sendLink(url);
+          }}
           // The page never navigates: anything else goes to the phone's browser.
           onShouldStartLoadWithRequest={req => {
             if (req.url.startsWith(BASE_URL) || req.url.startsWith('about:')) return true;

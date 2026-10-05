@@ -60,6 +60,9 @@ Alla domanda "Raccogli dati da questa app?" rispondi **Sì**, poi dichiara solo 
 | Contenuti utente › Altri contenuti dell'utente | Il nome scelto per la classifica | Funzionalità dell'app | No | No |
 | Identificatori › ID utente | Il codice casuale e anonimo del dispositivo per la classifica | Funzionalità dell'app | No | No |
 
+Dalla 1.9 il server conserva anche amicizie e duelli (codice amico, punteggio a ogni secondo):
+rientrano negli stessi tre tipi di dato, quindi le risposte non cambiano.
+
 Niente pubblicità, niente analisi, niente dati di posizione, contatti o salute. L'informativa
 completa è su https://color-spin.espertini.com/privacy.html.
 
