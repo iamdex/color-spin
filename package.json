@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "scripts": {
+    "ota": "npm --prefix mobile run ota --",
+    "ota:preview": "npm --prefix mobile run ota:preview --"
+  }
+}

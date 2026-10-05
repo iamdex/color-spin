@@ -31,10 +31,11 @@ The whole game is JavaScript (`web/index.html`, bundled into `game-html.js`), so
 game reaches the store builds without a new review:
 
 ```sh
-cd mobile
 npm run ota -- --message "What changed"           # production channel: the store builds
 npm run ota:preview -- --message "What changed"   # preview channel: the test APKs
 ```
+
+Both work from the repository root or from `mobile/`.
 
 The script rebuilds `game-html.js` first. Phones download the update in the background when the app
 starts and use it from the next launch.
