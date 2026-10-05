@@ -3,6 +3,7 @@
 // private, so it comes from store.review.local.json, which stays out of git:
 //   { "email": "...", "phone": "+39 ..." }
 // or from the APPLE_REVIEW_EMAIL and APPLE_REVIEW_PHONE environment variables.
+/* global __dirname */ // a Node.js file, run by EAS
 const fs = require('node:fs');
 const path = require('node:path');
 const config = require('./store.config.json');

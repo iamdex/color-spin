@@ -49,7 +49,7 @@
   const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6, AWARDS: 7, SPLASH: 8 };
   const SPLASH_TIME = 3.3; // the opening: the logo builds itself, the title, the author
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
-  const VERSION = '1.7.1';
+  const VERSION = '1.8';
   // Hits in a row for x2, x3 and x4. A miss starts the count again.
   const COMBO_STEPS = [10, 25, 50];
   const JOLLY_POINTS = 3, SLOW_TIME = 5, SLOW_FACTOR = 0.5;
@@ -86,6 +86,12 @@
   // Colorblind help: a symbol for each color, in PALETTE's order.
   const SYMBOLS = ['dot', 'square', 'triangle', 'diamond', 'plus', 'cross', 'star', 'bars'];
   const SYMBOLS_KEY = 'color-spin-symbols', AWARDS_KEY = 'color-spin-awards', LOOK_KEY = 'color-spin-look';
+  const VIBRATE_KEY = 'color-spin-vibrate';
+  // A breather after every new shape: its first balls come slower and fewer at a time.
+  const CALM_BALLS = 8, CALM_SLOW = 0.35;
+  // Combo feedback: the color of each multiplier (x4 cycles through the palette).
+  const COMBO_COLORS = { 2: '#ffd43b', 3: '#ff922b', 4: '#ff4d6d' };
+  const reducedMotion = (() => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } })();
   // Looks won with the awards: background themes and ball trails. The first of each is free.
   const THEMES = [
     { id: 'night', top: '#1c1638', bottom: '#08080f' },
@@ -138,6 +144,8 @@
       "no_hardcore": "Ancora nessuna partita hardcore",
       "share_hardcore": "Color Spin · Hardcore: %d punti! Riesci a battermi?",
       "symbols": "SIMBOLI",
+      "vibration": "VIBRAZIONE",
+      "combo_lost": "COMBO %d PERSA",
       "awards": "TROFEI",
       "awards_count": "%d SU %d",
       "theme": "TEMA",
@@ -318,6 +326,8 @@
       "no_hardcore": "No hardcore games yet",
       "share_hardcore": "Color Spin · Hardcore: %d points! Can you beat me?",
       "symbols": "SYMBOLS",
+      "vibration": "VIBRATION",
+      "combo_lost": "COMBO %d LOST",
       "awards": "AWARDS",
       "awards_count": "%d OF %d",
       "theme": "THEME",
@@ -497,6 +507,19 @@
   const loadJSON = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
   const saveJSON = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
   let symbolsOn = loadJSON(SYMBOLS_KEY, false) === true;
+  let vibrateOn = loadJSON(VIBRATE_KEY, true) !== false;
+  // Haptics: the app's native ones, or the browser's vibration (Android).
+  const VIBES = { light: 8, medium: 20, heavy: [35, 40, 35], success: [12, 40, 18] };
+  function haptic(kind) {
+    if (!vibrateOn) return;
+    if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'haptic', kind }));
+    else if (navigator.vibrate) { try { navigator.vibrate(VIBES[kind]); } catch {} }
+  }
+  function toggleVibrate() {
+    vibrateOn = !vibrateOn;
+    saveJSON(VIBRATE_KEY, vibrateOn);
+    sfx.play('click'); haptic('medium');
+  }
   // got: award id -> when it was won; caught: the special balls ever caught.
   const awardsRec = loadJSON(AWARDS_KEY, {});
   awardsRec.got ||= {}; awardsRec.caught ||= [];
@@ -607,7 +630,11 @@
       this.tween = { from: this.rotation, to: this.turns * this.step(), t: 0 };
     },
     pulse() { this.pulseT = 0; },
+    // Points out the side a new shape just gained (the last color).
+    highlightNew() { this.hl = 1.8; },
+    hl: 0,
     update(dt) {
+      this.hl = Math.max(this.hl - dt, 0);
       if (this.tween) {
         const tw = this.tween; tw.t += dt;
         const k = Math.min(tw.t / TURN_TIME, 1);
@@ -656,11 +683,23 @@
         g.addColorStop(0, rgba(darkened(c, 0.5))); g.addColorStop(1, rgba(c));
         tri(a, b, 1); ctx.fillStyle = g; ctx.fill();
       }
+      if (this.hl > 0) {
+        const a = verts[n - 1], b = verts[0], k = Math.min(1, this.hl / 0.5) * (0.55 + 0.45 * Math.sin((1.8 - this.hl) * 12));
+        tri(a, b, 1.22); ctx.fillStyle = rgba(this.colors[n - 1], 0.35 * k); ctx.fill();
+        tri(a, b, 1); ctx.fillStyle = `rgba(255,255,255,${0.42 * k})`; ctx.fill();
+      }
       ctx.lineCap = 'round';
       for (let i = 0; i < n; i++) {
         const a = verts[i], b = verts[(i + 1) % n];
         ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
         ctx.strokeStyle = rgba(lightened(this.colors[i], 0.35)); ctx.lineWidth = 6; ctx.stroke();
+      }
+      if (this.hl > 0) {
+        // The new side's edge, glowing white.
+        const a = verts[n - 1], b = verts[0], k = Math.min(1, this.hl / 0.5);
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+        ctx.save(); ctx.shadowColor = '#fff'; ctx.shadowBlur = 24 * k;
+        ctx.strokeStyle = `rgba(255,255,255,${0.95 * k})`; ctx.lineWidth = 9; ctx.stroke(); ctx.restore();
       }
       ctx.strokeStyle = 'rgba(13,13,23,0.55)'; ctx.lineWidth = 3;
       for (const v of verts) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(v[0], v[1]); ctx.stroke(); }
@@ -724,6 +763,8 @@
       this.buffers.miss = buf(buzz(170, 60, 0.32, 0.12, 0.45));
       this.buffers.level = buf(arp([659.25, 783.99, 1046.5], 0.08, 0.3, 0.1, 0.3, 0.3));
       this.buffers.combo = buf(arp([783.99, 1046.5, 1318.51, 1567.98], 0.05, 0.25, 0.08, 0.26, 0.3));
+      this.buffers.milestone = buf(arp([1046.5, 1318.51, 1567.98, 2093], 0.04, 0.22, 0.08, 0.22, 0.3));
+      this.buffers.lost = buf(arp([659.25, 523.25, 392, 293.66], 0.07, 0.3, 0.1, 0.26, 0.5));
       this.buffers.power = buf(arp([1046.5, 1567.98, 2093], 0.04, 0.3, 0.1, 0.22, 0.2));
       this.buffers.switch = buf(blip(700, 1200, 0.08, 0.03, 0.22));
       this.buffers.soft = buf(blip(330, 220, 0.18, 0.07, 0.22)); // a miss in Zen
@@ -1430,6 +1471,8 @@
   let streak = 0, arrowFlash = [0, 0], lastRank = 0, lastGameImproved = false, playTime = 0;
   // hits: balls matched (they set the level); score adds the combo and bonus points.
   let hits = 0, bestStreak = 0, comboPop = 0, slowTime = 0, hint = null;
+  // calm: see CALM_BALLS; the rest is combo feedback (flash, zoom kick, every-10 pop, lost combo).
+  let calm = 0, comboFlash = 0, comboColor = WHITE, kick = 0, milestone = null, comboLost = null;
   // mode: 'classic' or 'daily'; rng drives the balls (seeded in the daily challenge).
   let mode = 'classic', twist = NO_TWIST, rng = Math.random, gameDay = today(), maxLives = MAX_LIVES;
   let boardTab = 'all'; // leaderboard screen: 'all', 'sprint' or 'today'
@@ -1476,6 +1519,7 @@
     balls = []; clearFx();
     score = 0; lives = maxLives; level = 1; newBest = false; spawnTimer = 1;
     hits = 0; bestStreak = 0; comboPop = 0; slowTime = 0; hint = null;
+    calm = 0; comboFlash = 0; kick = 0; milestone = null; comboLost = null;
     streak = 0; lastRank = 0; lastGameImproved = false; playTime = 0;
     state = STATE.PLAYING; fade = 1;
     shape.setup(sidesForLevel(level));
@@ -1508,16 +1552,18 @@
   const pace = () => mode === 'zen' ? Math.min(difficulty(), ZEN_PACE)
     : mode === 'sprint' ? difficulty() + SPRINT_BOOST
     : mode === 'hardcore' ? difficulty() + HARDCORE_BOOST : difficulty();
-  const travelTime = () => Math.max(1, 2.9 - 0.25 * pace()) / (twist.speed || 1);
-  const spawnInterval = () => Math.max(0.5, 1.7 - 0.18 * pace());
-  const maxBalls = () => Math.min(level + 1, 3 + tier(level));
+  // calm: balls left in the breather after a new shape (slower, at most 2 at a time).
+  const calmK = () => 1 + CALM_SLOW * calm / CALM_BALLS;
+  const travelTime = () => Math.max(1, 2.9 - 0.25 * pace()) / (twist.speed || 1) * calmK();
+  const spawnInterval = () => Math.max(0.5, 1.7 - 0.18 * pace()) * calmK();
+  const maxBalls = () => Math.min(level + 1, 3 + tier(level), calm > 0 ? 2 : 99);
   const multiplier = () => 1 + COMBO_STEPS.filter(n => streak >= n).length;
 
   // Special balls, unlocked as the game goes on: [kind, from level, chance per ball].
   // The chameleon keeps getting more frequent, so the game still changes past the octagon.
   const SPECIALS = [
     ['heart', 4, () => (mode === 'sprint' || lives < maxLives) && !balls.some(b => b.kind === 'heart') ? 0.05 : 0],
-    ['jolly', 7, () => 0.05],
+    ['jolly', 8, () => 0.05], // not at 7: the pentagon is enough news
     ['slow', 10, () => slowTime > 0 || balls.some(b => b.kind === 'slow') ? 0 : 0.03],
     ['chameleon', 16, from => Math.min(0.12 + 0.02 * (level - from), 0.4)],
   ];
@@ -1562,6 +1608,7 @@
     }
     balls.push(b);
     if (kind) introduce(kind);
+    if (calm > 0) calm--;
   }
 
   function checkHits() {
@@ -1586,7 +1633,18 @@
     burst(b.x, b.y, color); ring(b.x, b.y, color, 10, 70);
     const len = Math.hypot(b.x, b.y) || 1;
     floatText(b.x + b.x / len * 50, b.y + b.y / len * 50, `+${points}`, color);
-    if (mult > before) { comboPop = 1; sfx.play('combo'); showBanner(tr('banner_combo', mult)); }
+    if (mult > before) {
+      // A new multiplier: banner, a flash and a ring in its color, a kick of the whole board.
+      comboPop = 1; sfx.play('combo'); showBanner(tr('banner_combo', mult));
+      comboColor = hex(COMBO_COLORS[mult]); comboFlash = 1; kick = 1;
+      ring(0, 0, comboColor, 70, 560, 0.7);
+      for (const c of shape.colors) burst(0, 0, c, 4, 520);
+      haptic('success');
+    } else if (streak >= 20 && streak % 10 === 0 && !COMBO_STEPS.includes(streak)) {
+      // Every 10 more: the count pops over the shape.
+      milestone = { n: streak, t: 1 }; kick = Math.max(kick, 0.5);
+      sfx.play('milestone'); haptic('medium');
+    } else haptic('light');
     if (b.kind === 'heart' && mode === 'sprint') {
       clock += SPRINT_HEART; sfx.play('power'); showBanner(tr('banner_time', SPRINT_HEART));
     } else if (b.kind === 'heart' && lives < maxLives) { lives++; sfx.play('power'); showBanner(tr('banner_heart')); }
@@ -1598,9 +1656,12 @@
   }
 
   function onMiss(b) {
+    const lost = streak;
     streak = 0;
     if (mode === 'zen') { burst(b.x, b.y, [0.75, 0.75, 0.8], 8, 150); sfx.play('soft'); return; }
-    shake = 14; flash = 1;
+    shake = 14; flash = 1; haptic('heavy');
+    // A real combo breaking apart, so it hurts a little.
+    if (lost >= 10) { comboLost = { n: lost, t: 1.4 }; sfx.play('lost'); }
     burst(b.x, b.y, [0.75, 0.75, 0.8], 10, 200); ring(b.x, b.y, PALETTE[0], 10, 90);
     if (mode === 'sprint') {
       clock = Math.max(clock - SPRINT_MISS, 0);
@@ -1619,7 +1680,8 @@
     if (n !== shape.sides) {
       // New figure: clear the board, a moment to look at it, and a life back.
       for (const b of balls) b.dead = true;
-      shape.setup(n);
+      shape.setup(n); shape.highlightNew();
+      calm = CALM_BALLS;
       sfx.play('figure');
       ring(0, 0, WHITE, 60, 450, 0.6);
       for (const c of shape.colors) burst(0, 0, c, 6, 420);
@@ -1710,9 +1772,9 @@
 
   const settingsButton = () => ({ x: W - 92, y: 24, w: 68, h: 68 });
   // Music, sounds, language, back.
-  // Music, sounds, language, symbols, back.
-  const settingsButtons = () => [0, 1, 2, 3, 4].map(i =>
-    ({ x: W / 2 - 260, y: H * 0.28 + i * 104 + (i === 4 ? 40 : 0), w: 520, h: 84 }));
+  // Music, sounds, language, vibration, symbols, back.
+  const settingsButtons = () => [0, 1, 2, 3, 4, 5].map(i =>
+    ({ x: W / 2 - 260, y: H * 0.26 + i * 100 + (i === 5 ? 44 : 0), w: 520, h: 82 }));
   let linkRect = { x: 0, y: 0, w: 0, h: 0 }; // the site link on the about screen, set when drawn
   const infoButton = () => ({ x: 24, y: 24, w: 68, h: 68 });
   // Top center, between the score and the lives.
@@ -1800,8 +1862,9 @@
       if (action === 'tap' && hit(rows[0], pos)) toggleMusic();
       else if (action === 'tap' && hit(rows[1], pos)) toggleSound();
       else if (action === 'tap' && hit(rows[2], pos)) toggleLanguage();
-      else if (action === 'tap' && hit(rows[3], pos)) toggleSymbols();
-      else if (action === 'back' || (action === 'tap' && hit(rows[4], pos))) {
+      else if (action === 'tap' && hit(rows[3], pos)) toggleVibrate();
+      else if (action === 'tap' && hit(rows[4], pos)) toggleSymbols();
+      else if (action === 'back' || (action === 'tap' && hit(rows[5], pos))) {
         sfx.play('click'); state = STATE.MENU; fade = 0.6;
       }
     } else if (state === STATE.LEADERBOARD && action === 'tap' && hit(reportRect, pos)) {
@@ -1944,6 +2007,10 @@
     flash = Math.max(flash - dt * 2.5, 0);
     scorePop = Math.max(scorePop - dt * 4, 0);
     comboPop = Math.max(comboPop - dt * 2, 0);
+    comboFlash = Math.max(comboFlash - dt * 3, 0);
+    kick = Math.max(kick - dt * 5, 0);
+    if (milestone && (milestone.t -= dt * 1.2) <= 0) milestone = null;
+    if (comboLost && (comboLost.t -= dt) <= 0) comboLost = null;
     bannerTime = Math.max(bannerTime - dt, 0);
     if (toast && (toast.time -= dt) <= 0) toast = null;
     if (awardQueue.length && (awardQueue[0].time -= dt) <= 0) { awardQueue.shift(); if (awardQueue.length) sfx.play('figure'); }
@@ -2224,6 +2291,25 @@
     // Into the menu.
     const out = clamp((t - (SPLASH_TIME - 0.4)) / 0.4, 0, 1);
     if (out > 0) { ctx.fillStyle = rgba(BG_BOTTOM, out); ctx.fillRect(0, 0, W, H); }
+  }
+
+  // "COMBO 37 LOST", its letters falling apart.
+  function drawComboLost() {
+    const t = comboLost.t / 1.4, str = tr('combo_lost', comboLost.n), size = 40, y0 = H * 0.36;
+    ctx.font = `800 ${size}px ${FONT}`;
+    let x = (W - ctx.measureText(str).width) / 2;
+    [...str].forEach((ch, i) => {
+      const w = ctx.measureText(ch).width, r = fposmod(Math.sin(i * 12.9898) * 43758.5453, 1), fall = (1 - t) ** 2;
+      ctx.save();
+      ctx.translate(x + w / 2 + (r - 0.5) * 80 * fall, y0 + fall * (120 + 160 * r));
+      ctx.rotate((r - 0.5) * 1.6 * fall);
+      ctx.globalAlpha = clamp(t * 1.6, 0, 1);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = rgba(PALETTE[0]); ctx.fillText(ch, 0, 0);
+      ctx.restore();
+      x += w;
+    });
+    ctx.globalAlpha = 1;
   }
 
   // A mode's icon, `size` wide, centered on x, y.
@@ -2613,18 +2699,33 @@
       [tr('music'), music.muted ? tr('off') : tr('on')],
       [tr('sounds'), sfx.muted ? tr('off') : tr('on')],
       [tr('language'), tr('lang_name')],
+      [tr('vibration'), vibrateOn ? tr('on') : tr('off')],
       [tr('symbols'), symbolsOn ? tr('on') : tr('off')],
     ];
     values.forEach(([k, v], i) => button(rows[i], `${k}:  ${v}`, WHITE, 0.1, WHITE));
     // A preview of the symbols next to their row.
     if (symbolsOn) SYMBOLS.forEach((k, i) => {
-      const x = W / 2 - 3.5 * 40 + i * 40, y = rows[3].y + rows[3].h + 26;
+      const x = W / 2 - 3.5 * 40 + i * 40, y = rows[4].y + rows[4].h + 28;
       circle(x, y, 15, rgba(PALETTE[i])); drawSymbol(k, x, y, 10, rgba(INK, 0.85));
     });
-    button(rows[4], tr('back'), PALETTE[2], 1, INK);
+    button(rows[5], tr('back'), PALETTE[2], 1, INK);
   }
 
   function drawPlay() {
+    const m = multiplier();
+    if (m > 1 && (state === STATE.PLAYING || state === STATE.PAUSED)) {
+      // The edges of the screen glow in the multiplier's color; x4 runs through the palette.
+      const c = m >= 4 ? PALETTE[Math.floor(time * 6) % PALETTE.length] : hex(COMBO_COLORS[m]);
+      const a = [0, 0, 0.13, 0.19, 0.26][m] * (reducedMotion ? 1 : 0.8 + 0.2 * Math.sin(time * 5));
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.hypot(W, H) * 0.56);
+      g.addColorStop(0, rgba(c, 0)); g.addColorStop(1, rgba(c, a));
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+    if (milestone && state === STATE.PLAYING) {
+      const t = milestone.t, grow = 1 + 0.4 * easeOut(1 - t);
+      centered(`${milestone.n}!`, worldY - 250, 96 * grow, PALETTE[2], clamp(t * 2, 0, 1));
+    }
+    if (comboLost && state === STATE.PLAYING) drawComboLost();
     ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(0, 0, W, 6);
     ctx.fillStyle = rgba(PALETTE[2]);
     ctx.fillRect(0, 0, W * (hits % POINTS_PER_LEVEL) / POINTS_PER_LEVEL, 6);
@@ -2728,11 +2829,15 @@
 
   function draw() {
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+    // A new multiplier kicks the board toward the player for a moment.
+    const k = reducedMotion ? 0 : kick * kick;
+    if (k > 0) { ctx.save(); ctx.translate(worldX, worldY); ctx.scale(1 + 0.04 * k, 1 + 0.04 * k); ctx.translate(-worldX, -worldY); }
     drawBackground();
     drawBalls();
     if (state === STATE.SPLASH) drawSplash();
     else shape.draw(worldX, worldY);
     drawFx(worldX, worldY);
+    if (k > 0) ctx.restore();
     if (state === STATE.MENU) drawMenu();
     else if (state === STATE.LEADERBOARD) drawLeaderboard();
     else if (state === STATE.ABOUT) drawAbout();
@@ -2758,6 +2863,7 @@
       ctx.globalAlpha = 1;
     }
     if (flash > 0) { ctx.fillStyle = `rgba(255,51,51,${0.22 * flash})`; ctx.fillRect(0, 0, W, H); }
+    if (comboFlash > 0 && !reducedMotion) { ctx.fillStyle = rgba(comboColor, 0.18 * comboFlash); ctx.fillRect(0, 0, W, H); }
     if (fade > 0) { ctx.fillStyle = rgba(BG_BOTTOM, fade); ctx.fillRect(0, 0, W, H); }
   }
 

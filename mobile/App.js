@@ -1,6 +1,7 @@
 // The app is the web game (web/index.html, bundled into game-html.js) in a
 // full-screen WebView. The native side only keeps the screen awake, opens
-// links in the phone's browser, shares the page's score picture and forwards
+// links in the phone's browser, shares the page's score picture, plays its
+// haptics and forwards
 // the back button and background events to the page (window.colorSpinApp in
 // web/index.html).
 import { useEffect, useRef } from 'react';
@@ -8,6 +9,7 @@ import { AppState, BackHandler, Linking, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -16,6 +18,14 @@ import gameHtml from './game-html';
 // A fixed https origin, so localStorage (best score, settings, leaderboard) persists.
 const BASE_URL = 'https://color-spin.local/';
 const BG = '#08080f';
+
+// The game's haptics (window.ReactNativeWebView messages from web/index.html).
+const HAPTICS = {
+  light: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
+  medium: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium),
+  heavy: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error),
+  success: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
+};
 
 // The page sends the picture as a PNG data URL: save it and open the share sheet.
 async function shareImage(dataUrl) {
@@ -44,6 +54,7 @@ export default function App() {
     if (msg.type === 'open' && /^https:\/\//.test(msg.url)) Linking.openURL(msg.url);
     else if (msg.type === 'exit') BackHandler.exitApp();
     else if (msg.type === 'share') shareImage(msg.image).catch(() => {});
+    else if (msg.type === 'haptic' && HAPTICS[msg.kind]) HAPTICS[msg.kind]().catch(() => {});
   }
 
   return (

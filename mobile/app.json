@@ -3,7 +3,7 @@
     "name": "Color Spin",
     "slug": "color-spin",
     "owner": "espertini_dot_com",
-    "version": "1.7.0",
+    "version": "1.8.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
