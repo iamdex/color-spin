@@ -2,6 +2,7 @@
   "expo": {
     "name": "Color Spin",
     "slug": "color-spin",
+    "scheme": "colorspin",
     "owner": "espertini_dot_com",
     "version": "1.8.0",
     "orientation": "portrait",
