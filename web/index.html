@@ -49,10 +49,10 @@
   const BALL_RADIUS = 16, TRAIL_LEN = 12;
   const FONT = 'Montserrat, "Arial Black", Arial, sans-serif';
   const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAME_OVER: 3, LEADERBOARD: 4, ABOUT: 5, SETTINGS: 6, AWARDS: 7, SPLASH: 8,
-                  FRIENDS: 9, DUEL: 10 };
+                  FRIENDS: 9, DUEL: 10, VERSUS: 11 };
   const SPLASH_TIME = 3.3; // the opening: the logo builds itself, the title, the author
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
-  const VERSION = '1.9';
+  const VERSION = '2.0';
   // Hits in a row for x2, x3 and x4. A miss starts the count again.
   const COMBO_STEPS = [10, 25, 50];
   const JOLLY_POINTS = 3, SLOW_TIME = 5, SLOW_FACTOR = 0.5;
@@ -78,13 +78,14 @@
   const SPRINT_TIME = 60, SPRINT_MISS = 3, SPRINT_HEART = 5, SPRINT_BOOST = 2, ZEN_PACE = 3, HARDCORE_BOOST = 3;
   // Each mode's color and icon, the same as on the presentation site (site/):
   // SVG paths on a 24x24 grid, filled or stroked.
-  const MODE_COLORS = { classic: '#ffd43b', sprint: '#3bc9db', zen: '#51cf66', hardcore: '#ff4d6d', duel: '#4dabf7' };
+  const MODE_COLORS = { classic: '#ffd43b', sprint: '#3bc9db', zen: '#51cf66', hardcore: '#ff4d6d', duel: '#4dabf7', versus: '#ff922b' };
   const MODE_ICONS = {
     classic: [['fill', 'M12 3l8 5v8l-8 5-8-5V8z']],
     sprint: [['stroke', 'M20 13a8 8 0 1 1-16 0a8 8 0 1 1 16 0'], ['stroke', 'M12 9v4l3 2M9 2h6']],
     zen: [['fill', 'M12 21c-5-2-8-6-8-11 3 0 6 1.5 8 4 2-2.5 5-4 8-4 0 5-3 9-8 11z']],
     hardcore: [['fill', 'M13 2L4 14h7l-1 8 9-12h-7z']],
     duel: [['stroke', 'M5 19L19 5M5 5l14 14'], ['stroke', 'M3 15l6 6M15 21l6-6']],
+    versus: [['stroke', 'M3 8h8M8 4l4 4-4 4M21 16h-8M16 12l-4 4 4 4']],
   };
 
   // Colorblind help: a symbol for each color, in PALETTE's order.
@@ -141,6 +142,33 @@
       "daily_rank": "%d° OGGI",
       "daily_rank_of": "%d° OGGI SU %d",
       "share": "CONDIVIDI",
+      "versus": "VERSUS",
+      "vs_waiting": "Aspetto %s",
+      "vs_friend": "il tuo amico",
+      "vs_room": "STANZA %s",
+      "vs_share": "CONDIVIDI LINK",
+      "cancel": "ANNULLA",
+      "vs_go": "VIA!",
+      "vs_rules": "2 minuti, 3 vite: vince chi fa più punti.",
+      "vs_rules_2": "Le combo mandano attacchi all'avversario!",
+      "vs_invited": "%s TI SFIDA IN VERSUS",
+      "vs_join": "ENTRA",
+      "vs_toast": "%s ti sfida in versus! Apri Amici",
+      "vs_out": "FUORI",
+      "vs_time": "TEMPO!",
+      "vs_dead": "SEI FUORI!",
+      "vs_wait_result": "Aspetto %s…  %d",
+      "vs_left": "%s si è disconnesso",
+      "vs_forfeit": "%s ha lasciato la partita",
+      "vs_offline": "Connessione persa",
+      "rematch": "RIVINCITA",
+      "rematch_wait": "ASPETTO…",
+      "rematch_asked": "%s vuole la rivincita!",
+      "attack_turbo": "TURBO!",
+      "attack_chameleon": "CAMALEONTI!",
+      "attack_spin": "GIRAVOLTA!",
+      "attack_sent": "%s  →",
+      "share_versus": "Sfidami in versus a Color Spin, 2 minuti testa a testa: %s",
       "friends": "AMICI",
       "your_code": "IL TUO CODICE",
       "invite": "INVITA",
@@ -308,7 +336,8 @@
           "AMICI E DUELLI",
           [
             "Invita gli amici con il tuo codice e",
-            "sfidali sulla stessa partita: SFIDA."
+            "sfidali sulla stessa partita: SFIDA.",
+            "VS: 2 minuti testa a testa dal vivo."
           ]
         ],
         [
@@ -369,6 +398,33 @@
       "daily_rank": "#%d TODAY",
       "daily_rank_of": "#%d TODAY OF %d",
       "share": "SHARE",
+      "versus": "VERSUS",
+      "vs_waiting": "Waiting for %s",
+      "vs_friend": "your friend",
+      "vs_room": "ROOM %s",
+      "vs_share": "SHARE LINK",
+      "cancel": "CANCEL",
+      "vs_go": "GO!",
+      "vs_rules": "2 minutes, 3 lives: most points wins.",
+      "vs_rules_2": "Combos send attacks to your opponent!",
+      "vs_invited": "%s CHALLENGES YOU TO A VERSUS",
+      "vs_join": "JOIN",
+      "vs_toast": "%s challenges you to a versus! Open Friends",
+      "vs_out": "OUT",
+      "vs_time": "TIME!",
+      "vs_dead": "YOU'RE OUT!",
+      "vs_wait_result": "Waiting for %s…  %d",
+      "vs_left": "%s disconnected",
+      "vs_forfeit": "%s left the game",
+      "vs_offline": "Connection lost",
+      "rematch": "REMATCH",
+      "rematch_wait": "WAITING…",
+      "rematch_asked": "%s wants a rematch!",
+      "attack_turbo": "TURBO!",
+      "attack_chameleon": "CHAMELEONS!",
+      "attack_spin": "SPIN!",
+      "attack_sent": "%s  →",
+      "share_versus": "Versus me at Color Spin, 2 minutes head to head: %s",
       "friends": "FRIENDS",
       "your_code": "YOUR CODE",
       "invite": "INVITE",
@@ -536,7 +592,8 @@
           "FRIENDS AND DUELS",
           [
             "Invite friends with your code and",
-            "challenge them on the same game."
+            "challenge them on the same game.",
+            "VS: 2 minutes head to head, live."
           ]
         ],
         [
@@ -1498,9 +1555,16 @@
     } catch { if (social.status !== 'ok') social.status = 'offline'; }
     updateUnseen();
   }
+  const toldInvites = new Set();
   function applyFriends(f) {
     social.me = f.me; social.friends = f.friends || [];
+    social.invites = (f.invites || []).filter(i => i.room !== versus.room);
     if (f.me) social.code = f.me.code;
+    for (const i of social.invites) {
+      if (toldInvites.has(i.room)) continue;
+      toldInvites.add(i.room);
+      if (state === STATE.MENU) { showToast(tr('vs_toast', i.name || tr('player'))); sfx.play('power'); haptic('medium'); }
+    }
   }
   // A dot on the friends icon: a friend beat you in today's challenge, or someone played your duel.
   function seenMarks() {
@@ -1511,7 +1575,7 @@
   function updateUnseen() {
     const seen = loadJSON(SEEN_SOCIAL_KEY, {}), marks = seenMarks();
     const beaten = social.me && social.me.today != null && social.friends.some(f => f.today != null && f.today > social.me.today);
-    social.unseen = (beaten && seen.beat !== marks.beat) || marks.duels > (seen.duels || 0);
+    social.unseen = (beaten && seen.beat !== marks.beat) || marks.duels > (seen.duels || 0) || (social.invites || []).length > 0;
   }
   function markSocialSeen() { saveJSON(SEEN_SOCIAL_KEY, seenMarks()); social.unseen = false; }
   async function addFriend(code) {
@@ -1551,6 +1615,94 @@
         duration: Math.round(playTime * 10) / 10, ghost: ghostRec });
     } catch {}
   }
+  // --- Versus: two friends live, one room on the server (server/src/match.js) ---
+  const VS_LIVES = 3, VS_SEND = 0.25, ATTACKS = ['turbo', 'chameleon', 'spin'];
+  const versus = {
+    room: '', ws: null, phase: 'idle', // idle | waiting | countdown | playing | over
+    you: 0, names: [], opp: null, start: null, result: null, rematch: false, oppRematch: false,
+    sendT: 0, retries: 0, beat: 0,
+    turbo: 0, cham: 0, spin: 0, spinT: 0, sent: null, // attacks received, and the last one sent
+  };
+  const oppName = () => versus.names[1 - versus.you] || tr('vs_friend');
+  const blankOpp = () => ({ score: 0, lives: VS_LIVES, streak: 0, level: 1, connected: true });
+  const vsSend = msg => { if (versus.ws && versus.ws.readyState === 1) versus.ws.send(JSON.stringify(msg)); };
+  async function inviteVersus(code) {
+    try { const { room } = await api('versus', { code }); joinVersus(room); }
+    catch (e) { showToast(tr(e.code === 'not a friend' ? 'code_unknown' : 'offline_social')); }
+  }
+  function joinVersus(room) {
+    if (!socialOn()) { showToast(tr('offline_social')); return; }
+    leaveVersus();
+    Object.assign(versus, { room, phase: 'waiting', you: 0, names: [], opp: null, start: null, result: null,
+      rematch: false, oppRematch: false, retries: 0 });
+    social.invites = (social.invites || []).filter(i => i.room !== room);
+    hideNameInput(); hideCodeInput();
+    state = STATE.VERSUS; fade = 0.6; sfx.play('click');
+    connectVersus();
+  }
+  function connectVersus() {
+    let ws;
+    try { ws = new WebSocket(`${API_URL.replace(/^http/, 'ws')}/versus/${versus.room}/ws?player=${net.player}&name=${encodeURIComponent(playerName)}`); }
+    catch { showToast(tr('vs_offline')); return; }
+    versus.ws = ws;
+    ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch { return; } versusMessage(m); };
+    ws.onclose = () => {
+      if (versus.ws !== ws) return;
+      versus.ws = null;
+      // Dropped mid-match: try to come back (the room waits 10 s).
+      if (versus.room && versus.phase !== 'idle' && versus.retries++ < 6) setTimeout(() => { if (!versus.ws && versus.room) connectVersus(); }, 1500);
+      else if (versus.room) showToast(tr('vs_offline'));
+    };
+  }
+  function leaveVersus() {
+    const ws = versus.ws;
+    Object.assign(versus, { ws: null, room: '', phase: 'idle' });
+    if (ws) { try { ws.close(); } catch {} }
+  }
+  function versusMessage(m) {
+    if (m.t === 'joined') {
+      versus.you = m.you; versus.names = m.names; versus.retries = 0;
+      if (m.opp) versus.opp = { ...blankOpp(), ...m.opp };
+      if (m.phase === 'playing' && m.seed) versusStart(m, true);
+    } else if (m.t === 'opponent') {
+      versus.names[1 - versus.you] = m.name; versus.opp = blankOpp(); sfx.play('power'); haptic('medium');
+    } else if (m.t === 'start') versusStart(m, false);
+    else if (m.t === 'state') versus.opp = { ...(versus.opp || blankOpp()), ...m, connected: true };
+    else if (m.t === 'attack') receiveAttack(m.kind);
+    else if (m.t === 'left') { if (versus.opp) versus.opp.connected = false; showToast(tr('vs_left', oppName())); }
+    else if (m.t === 'back') { if (versus.opp) versus.opp.connected = true; }
+    else if (m.t === 'rematch') { versus.oppRematch = true; sfx.play('click'); }
+    else if (m.t === 'result') {
+      versus.result = m; versus.phase = 'over';
+      if (mode === 'versus' && state === STATE.PLAYING) gameOver();
+      const won = m.winner === versus.you;
+      sfx.play(m.winner < 0 ? 'level' : won ? 'figure' : 'game_over'); haptic(won ? 'success' : 'medium');
+    }
+  }
+  // Both phones start at the same moment: the room's time, corrected for this clock.
+  function versusStart(m, rejoin) {
+    versus.start = { seed: m.seed, at: m.at - (m.now - Date.now()), duration: m.duration };
+    if (!rejoin) Object.assign(versus, { result: null, rematch: false, oppRematch: false, opp: blankOpp() });
+    if (rejoin && mode === 'versus' && state === STATE.PLAYING) return; // back after a drop: carry on
+    if (Date.now() >= versus.start.at) { versus.phase = 'playing'; start('versus'); }
+    else { versus.phase = 'countdown'; state = STATE.VERSUS; versus.beat = 0; }
+  }
+  function sendAttack(kind) {
+    if (mode !== 'versus' || state !== STATE.PLAYING) return;
+    vsSend({ t: 'attack', kind });
+    versus.sent = { kind, time: 1.4 };
+  }
+  function receiveAttack(kind) {
+    if (mode !== 'versus' || state !== STATE.PLAYING) return;
+    if (kind === 'turbo') versus.turbo += 4;
+    else if (kind === 'chameleon') versus.cham += 2;
+    else if (kind === 'spin') { versus.spin += 3; versus.spinT = 0.3; }
+    showBanner(tr(`attack_${kind}`));
+    comboColor = hex(MODE_COLORS.versus); comboFlash = 1; kick = Math.max(kick, 0.6);
+    sfx.play('switch'); haptic('heavy');
+  }
+  const shareVersus = () => shareLink(tr('share_versus', playUrl(`versus=${versus.room}`)));
+
   // Text with a link: the share sheet, or the clipboard.
   async function shareLink(msg) {
     if (app) { tellApp({ type: 'shareText', text: msg }); return; }
@@ -1566,10 +1718,11 @@
     let u;
     try { u = new URL(url, location.href); } catch { return; }
     const q = u.searchParams, get = k => q.get(k) || '';
-    let friend = get('amico'), duel = get('duello'), restore = get('recupero');
+    let friend = get('amico'), duel = get('duello'), restore = get('recupero'), room = get('versus');
     if (u.protocol === 'colorspin:') {
       const [kind, value = ''] = `${u.host}${u.pathname}`.split('/').filter(Boolean);
       if (kind === 'amico') friend = value; else if (kind === 'duello') duel = value; else if (kind === 'recupero') restore = value;
+      else if (kind === 'versus') room = value;
     }
     if (/^[0-9a-f]{32}$/.test(restore) && restore !== net.player) {
       try { localStorage.setItem(PLAYER_KEY, restore); localStorage.setItem(RESTORED_KEY, '1'); } catch {}
@@ -1578,8 +1731,9 @@
     }
     if (friend) addFriend(friend.toUpperCase().replace(/[^A-Z0-9]/g, ''));
     if (duel) loadDuel(duel.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+    if (room) joinVersus(room.toUpperCase().replace(/[^A-Z0-9]/g, ''));
   }
-  if (/[?&](amico|duello|recupero)=/.test(location.search)) {
+  if (/[?&](amico|duello|recupero|versus)=/.test(location.search)) {
     linkQueue.push(location.href);
     try { history.replaceState(null, '', location.pathname); } catch {}
   }
@@ -1715,7 +1869,7 @@
   // calm: see CALM_BALLS; the rest is combo feedback (flash, zoom kick, every-10 pop, lost combo).
   // gameSeed: classic games are seeded too, so any of them can become a duel;
   // ghostRec: the score at every second of play, the duel's ghost.
-  let gameSeed = '', ghostRec = [0];
+  let gameSeed = '', ghostRec = [0], socialPoll = 8;
   let calm = 0, comboFlash = 0, comboColor = WHITE, kick = 0, milestone = null, comboLost = null;
   // mode: 'classic' or 'daily'; rng drives the balls (seeded in the daily challenge).
   let mode = 'classic', twist = NO_TWIST, rng = Math.random, gameDay = today(), maxLives = MAX_LIVES;
@@ -1764,10 +1918,13 @@
     mode = m; gameDay = today();
     twist = mode === 'daily' ? twistFor(gameDay) : NO_TWIST;
     if (mode === 'duel') gameSeed = social.duel.seed;
+    else if (mode === 'versus') gameSeed = versus.start.seed;
     else if (mode === 'classic') gameSeed = Array.from({ length: 10 }, () => 'abcdefghijkmnpqrstuvwxyz23456789'[Math.random() * 32 | 0]).join('');
     rng = mode === 'daily' ? seededRandom(`color-spin-${gameDay}`)
-      : mode === 'classic' || mode === 'duel' ? seededRandom(`classic-${gameSeed}`) : Math.random;
-    maxLives = mode === 'hardcore' ? 1 : twist.lives || MAX_LIVES;
+      : mode === 'classic' || mode === 'duel' ? seededRandom(`classic-${gameSeed}`)
+      : mode === 'versus' ? seededRandom(`versus-${gameSeed}`) : Math.random;
+    maxLives = mode === 'hardcore' ? 1 : mode === 'versus' ? VS_LIVES : twist.lives || MAX_LIVES;
+    Object.assign(versus, { turbo: 0, cham: 0, spin: 0, sent: null, sendT: 0 });
     ghostRec = [0];
     balls = []; clearFx();
     score = 0; lives = maxLives; level = 1; newBest = false; spawnTimer = 1;
@@ -1789,11 +1946,11 @@
     } else if (mode === 'zen' || mode === 'hardcore') {
       hint = { title: tr(`mode_${mode}`), line: tr(`mode_info_${mode}`), time: 3.5 };
       if (mode === 'hardcore') refreshRemote(hardcore);
-    } else showBanner(mode === 'duel' ? tr('duel_title') : tr('banner_level', 1));
+    } else showBanner(mode === 'duel' ? tr('duel_title') : mode === 'versus' ? tr('vs_go') : tr('banner_level', 1));
   }
   // Zen keeps the music calm: the first tempo and at most three instruments more.
   const musicLevel = () => mode === 'zen' ? [1, Math.min(tier(level), 2)] : [level, tier(level)];
-  const hasLives = () => mode === 'classic' || mode === 'daily' || mode === 'hardcore' || mode === 'duel';
+  const hasLives = () => ['classic', 'daily', 'hardcore', 'duel', 'versus'].includes(mode);
 
   const tier = lvl => Math.min(Math.floor((lvl - 1) / LEVELS_PER_SIDE), MAX_SIDES - MIN_SIDES);
   const sidesForLevel = lvl => MIN_SIDES + tier(lvl);
@@ -1804,7 +1961,8 @@
   // Zen stops getting faster at an easy pace; 60 seconds starts at a brisker one.
   const pace = () => mode === 'zen' ? Math.min(difficulty(), ZEN_PACE)
     : mode === 'sprint' ? difficulty() + SPRINT_BOOST
-    : mode === 'hardcore' ? difficulty() + HARDCORE_BOOST : difficulty();
+    : mode === 'hardcore' ? difficulty() + HARDCORE_BOOST
+    : mode === 'versus' ? difficulty() + 1 : difficulty(); // 2 minutes: a little brisker
   // calm: balls left in the breather after a new shape (slower, at most 2 at a time).
   const calmK = () => 1 + CALM_SLOW * calm / CALM_BALLS;
   const travelTime = () => Math.max(1, 2.9 - 0.25 * pace()) / (twist.speed || 1) * calmK();
@@ -1849,9 +2007,13 @@
   function spawnBall() {
     // Always four draws per ball, so the daily sequence stays the same for everyone.
     const [dx, dy] = SPAWN_DIRS[rng() * 4 | 0];
-    const ci = rng() * shape.sides | 0, kind = pickSpecial(rng()), other = rng();
+    const ci = rng() * shape.sides | 0, other = rng();
+    let kind = pickSpecial(rng());
     const dist = Math.abs(dx) * W / 2 + Math.abs(dy) * H / 2 + BALL_RADIUS;
-    const v = (dist - SHAPE_RADIUS) / travelTime();
+    let v = (dist - SHAPE_RADIUS) / travelTime();
+    // Versus attacks: chameleons instead of plain balls, faster balls.
+    if (mode === 'versus' && versus.cham > 0 && !kind) { kind = 'chameleon'; versus.cham--; }
+    if (mode === 'versus' && versus.turbo > 0) { v *= 1.45; versus.turbo--; }
     // Same travel time from every edge, so a portrait screen stays fair.
     const b = { kind, ci, color: PALETTE[ci], x: dx * dist, y: dy * dist, vx: -dx * v, vy: -dy * v, trail: [] };
     // The chameleon switches color with 0.7 s left to react.
@@ -1893,10 +2055,12 @@
       ring(0, 0, comboColor, 70, 560, 0.7);
       for (const c of shape.colors) burst(0, 0, c, 4, 520);
       haptic('success');
+      sendAttack(ATTACKS[mult - 2]);
     } else if (streak >= 20 && streak % 10 === 0 && !COMBO_STEPS.includes(streak)) {
       // Every 10 more: the count pops over the shape.
       milestone = { n: streak, t: 1 }; kick = Math.max(kick, 0.5);
       sfx.play('milestone'); haptic('medium');
+      sendAttack(ATTACKS[Math.random() * ATTACKS.length | 0]);
     } else haptic('light');
     if (b.kind === 'heart' && mode === 'sprint') {
       clock += SPRINT_HEART; sfx.play('power'); showBanner(tr('banner_time', SPRINT_HEART));
@@ -1965,6 +2129,8 @@
     if (slowTime > 0) { slowTime = 0; music.setSlow(false); }
     // A duel only counts against its ghost: no records, no boards.
     if (mode === 'duel') { submitDuelResult(); return; }
+    // A versus game: the room has the last word.
+    if (mode === 'versus') { vsSend({ t: 'state', score, lives, streak: 0, level }); return; }
     if (mode === 'daily') {
       // The daily challenge has its own records and board.
       board.localHighlight = -1;
@@ -2050,6 +2216,9 @@
   const gameOverButtons = () => {
     const y = H * 0.62 + (nameShown ? NAME_ROW : 0), on = socialOn();
     const replay = { id: 'replay', x: W / 2 - 210, y, w: 420, h: 88 };
+    if (mode === 'versus') return versus.result
+      ? [{ ...replay, id: 'rematch' }, { id: 'menu', x: W / 2 - 210, y: y + 108, w: 420, h: 84 }]
+      : [{ id: 'menu', x: W / 2 - 210, y: y + 108, w: 420, h: 84 }];
     if (mode === 'classic' && on) return [replay, { id: 'duel', x: W / 2 - 210, y: y + 108, w: 202, h: 88 },
       { id: 'share', x: W / 2 + 8, y: y + 108, w: 202, h: 88 }, { id: 'menu', x: W / 2 - 210, y: y + 216, w: 420, h: 76 }];
     const second = mode === 'duel' ? (on ? 'sendback' : null) : 'share';
@@ -2092,7 +2261,8 @@
         sfx.play('click'); state = STATE.ABOUT; fade = 0.6; pageScroll = pageVel = 0;
       } else if (action !== 'back') start(menuMode);
     } else if (state === STATE.PLAYING) {
-      if (action === 'pause' || action === 'back' || (action === 'tap' && hit(grow(pauseButton(), 12), pos))) {
+      if (mode === 'versus') { if (action === 'pause' || action === 'back') return; } // the clock doesn't stop
+      else if (action === 'pause' || action === 'back' || (action === 'tap' && hit(grow(pauseButton(), 12), pos))) {
         pause(); return;
       }
       let dir = 0;
@@ -2118,13 +2288,15 @@
       }
     } else if (state === STATE.GAME_OVER) {
       if (gameOverTime < 0.6) return;
-      const id = action === 'confirm' ? 'replay' : action === 'back' ? 'menu' : (gameOverButtons().find(r => hit(r, pos)) || {}).id;
+      const id = action === 'confirm' ? (mode === 'versus' ? 'rematch' : 'replay') : action === 'back' ? 'menu'
+        : (gameOverButtons().find(r => hit(r, pos)) || {}).id;
       if (!id) return;
       sfx.play('click');
       if (id === 'replay') start();
       else if (id === 'share') share();
       else if (id === 'duel' || id === 'sendback') createDuel();
-      else if (id === 'menu') goToMenu();
+      else if (id === 'rematch') { if (versus.result && !versus.rematch) { versus.rematch = true; vsSend({ t: 'rematch' }); } }
+      else if (id === 'menu') { if (mode === 'versus') leaveVersus(); goToMenu(); }
     } else if (state === STATE.SETTINGS) {
       const rows = settingsButtons();
       if (action === 'tap' && hit(rows[0], pos)) toggleMusic();
@@ -2148,6 +2320,10 @@
     } else if (state === STATE.FRIENDS && action === 'tap' && pos.y < pageBottom() &&
       friendRects.some(o => hit(o.r, { x: pos.x, y: pos.y + pageScroll }))) {
       friendTap(friendRects.find(o => hit(o.r, { x: pos.x, y: pos.y + pageScroll })));
+    } else if (state === STATE.VERSUS) {
+      const b = versusButtons(), on = id => b.some(r => r.id === id && hit(r, pos));
+      if (action === 'tap' && on('share')) { sfx.play('click'); shareVersus(); }
+      else if (versus.phase === 'waiting' && (action === 'back' || (action === 'tap' && on('cancel')))) { sfx.play('click'); leaveVersus(); goToMenu(); }
     } else if (state === STATE.DUEL) {
       const b = duelButtons(), on = id => hit(b.find(r => r.id === id), pos);
       if (action === 'confirm' || (action === 'tap' && on('play'))) start('duel');
@@ -2226,7 +2402,7 @@
 
   // Leaving the page (tab switch, app switch, lost focus) pauses a running game.
   function onLeave() {
-    if (state === STATE.PLAYING) pause();
+    if (state === STATE.PLAYING && mode !== 'versus') pause();
     else if (state === STATE.PAUSED) resumeTimer = 0; // back to the pause menu instead of resuming unattended
   }
   // Hidden tabs throttle timers: suspend audio instead of letting the music stutter.
@@ -2293,6 +2469,7 @@
     bannerTime = Math.max(bannerTime - dt, 0);
     if (toast && (toast.time -= dt) <= 0) toast = null;
     if (social.removing && (social.removing.time -= dt) <= 0) social.removing = null;
+    if ((state === STATE.MENU || state === STATE.FRIENDS) && (socialPoll -= dt) <= 0) { socialPoll = 8; refreshSocial(); }
     if (awardQueue.length && (awardQueue[0].time -= dt) <= 0) { awardQueue.shift(); if (awardQueue.length) sfx.play('figure'); }
     modeFlash = modeFlash > 0 ? Math.max(modeFlash - dt * 5, 0) : Math.min(modeFlash + dt * 5, 0);
     if (pageVel && !drag) {
@@ -2320,6 +2497,13 @@
     }
     updateFx(dt);
 
+    if (versus.sent && (versus.sent.time -= dt) <= 0) versus.sent = null;
+    if (state === STATE.VERSUS && versus.phase === 'countdown' && versus.start) {
+      // 3, 2, 1, go: a beep for each.
+      const left = versus.start.at - Date.now(), n = Math.ceil(left / 1000);
+      if (n !== versus.beat && n <= 3 && n > 0) { versus.beat = n; sfx.play('click'); haptic('light'); }
+      if (left <= 0) { versus.phase = 'playing'; start('versus'); sfx.play('figure'); }
+    }
     if (state === STATE.SPLASH) {
       splashTime += dt;
       if (!splashBurst && splashTime >= SPLASH_SNAP) {
@@ -2341,6 +2525,14 @@
       if (balls.length >= maxBalls()) spawnTimer = Math.max(spawnTimer, 0.4);
       else if (spawnTimer <= 0) { spawnBall(); spawnTimer = spawnInterval(); }
       checkHits();
+      if (mode === 'versus' && state === STATE.PLAYING) {
+        const before = Math.ceil(clock);
+        clock = Math.max(0, (versus.start.at + versus.start.duration * 1000 - Date.now()) / 1000);
+        if ((versus.sendT -= dt) <= 0) { versus.sendT = VS_SEND; vsSend({ t: 'state', score, lives, streak, level }); }
+        if (versus.spin > 0 && (versus.spinT -= dt) <= 0) { versus.spin--; versus.spinT = 0.45; shape.rotateStep(Math.random() < 0.5 ? -1 : 1); }
+        if (clock <= 0) gameOver();
+        else if (Math.ceil(clock) < before && clock < 5) sfx.play('click');
+      }
       if (mode === 'sprint' && state === STATE.PLAYING) {
         // The clock runs slower in slow motion too; a tick for each of the last 5 seconds.
         const before = Math.ceil(clock);
@@ -2574,6 +2766,20 @@
     if (out > 0) { ctx.fillStyle = rgba(BG_BOTTOM, out); ctx.fillRect(0, 0, W, H); }
   }
 
+  // The time left where the pause button usually is; the opponent under it.
+  function drawOpponent() {
+    const secs = Math.ceil(clock), low = clock < 10;
+    centered(`${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`, 76, 44, low ? PALETTE[0] : WHITE);
+    const o = versus.opp || blankOpp(), name = oppName().toUpperCase(), c = hex(MODE_COLORS.versus);
+    const ahead = score - o.score;
+    centered(`${name}  ${o.score}`, 124, 24, o.connected ? c : WHITE, o.connected ? 1 : 0.4);
+    if (o.lives > 0) for (let i = 0; i < VS_LIVES; i++) circle(W / 2 - 18 + i * 18, 144, 5.5, i < o.lives ? rgba(PALETTE[0]) : 'rgba(255,255,255,0.18)');
+    else centered(tr('vs_out'), 152, 16, PALETTE[0]);
+    centered(ahead > 0 ? `+${ahead}` : String(ahead), 176, 18, ahead > 0 ? PALETTE[3] : ahead < 0 ? PALETTE[0] : WHITE, 0.8);
+    if (versus.sent) centered(tr('attack_sent', tr(`attack_${versus.sent.kind}`)), 204, 18, c, clamp(versus.sent.time, 0, 1));
+    iconText('versus', W - 24, 104, tr('versus'), 18, c, 0.85, 'right');
+  }
+
   // Under the pause button: how far ahead (green) or behind (red) the ghost you are.
   function drawGhost() {
     const o = social.duel.owner, gh = o.ghost, name = (o.name || tr('player')).toUpperCase();
@@ -2682,6 +2888,8 @@
     if (o.kind === 'invite') { sfx.play('click'); shareInvite(); }
     else if (o.kind === 'add') { sfx.play('click'); showCodeInput(); }
     else if (o.kind === 'duel') loadDuel(o.id);
+    else if (o.kind === 'versus') { sfx.play('click'); inviteVersus(o.code); }
+    else if (o.kind === 'join') joinVersus(o.room);
     else if (o.kind === 'friend') {
       if (social.removing && social.removing.code === o.code && social.removing.time > 0) { social.removing = null; removeFriend(o.code); }
       else { social.removing = { code: o.code, time: 3 }; showToast(tr('remove_friend', o.name)); }
@@ -2694,6 +2902,19 @@
     friendRects = [];
     centered(tr('friends'), H * 0.1, 60, WHITE);
     let y = H * 0.1 + 64;
+    // Versus invites, first.
+    for (const inv of social.invites || []) {
+      const card = { x: 40, y: y - 10, w: W - 80, h: 92 }, join = { x: W - 40 - 170, y: y + 6, w: 150, h: 60 };
+      roundRect(card, 20); ctx.fillStyle = rgba(hex(MODE_COLORS.versus), 0.18); ctx.fill();
+      drawModeIcon('versus', 80, y + 36, 32, hex(MODE_COLORS.versus));
+      let label = tr('vs_invited', (inv.name || tr('player')).toUpperCase());
+      ctx.font = `800 20px ${FONT}`;
+      while (label.length > 6 && ctx.measureText(label).width > W - 380) label = label.slice(0, -2) + '…';
+      text(112, y + 43, label, 20, WHITE);
+      button(join, tr('vs_join'), hex(MODE_COLORS.versus), 1, INK);
+      friendRects.push({ r: join, kind: 'join', room: inv.room }, { r: card, kind: 'join', room: inv.room });
+      y += 106;
+    }
     centered(tr('your_code'), y, 18, WHITE, 0.5);
     const pill = { x: W / 2 - 190, y: y + 18, w: 380, h: 76 };
     roundRect(pill, 38); ctx.fillStyle = 'rgba(255,255,255,0.07)'; ctx.fill();
@@ -2710,8 +2931,8 @@
     // You and your friends: today's challenge and the classic best.
     const w = W - 80;
     text(40, y, tr('friends_board'), 20, PALETTE[2]);
-    text(40 + w - 140, y, tr('col_today'), 15, WHITE, 0.5, 'right');
-    text(40 + w - 16, y, tr('col_best'), 15, WHITE, 0.5, 'right');
+    text(40 + w - 220, y, tr('col_today'), 15, WHITE, 0.5, 'right');
+    text(40 + w - 96, y, tr('col_best'), 15, WHITE, 0.5, 'right');
     y += 18;
     const rows = [...(social.me ? [{ ...social.me, mine: true }] : []), ...social.friends]
       .sort((a, b) => (b.today ?? -1) - (a.today ?? -1) || (b.classic ?? -1) - (a.classic ?? -1));
@@ -2726,11 +2947,18 @@
       ctx.fillText(String(i + 1), 74, y + 30);
       let name = (f.name || tr('player')) + (f.mine ? tr('you') : '');
       ctx.font = `800 22px ${FONT}`;
-      while (name.length > 3 && ctx.measureText(name).width > w - 300) name = name.slice(0, -2) + '…';
+      while (name.length > 3 && ctx.measureText(name).width > w - 380) name = name.slice(0, -2) + '…';
       text(104, y + 37, name, 22, WHITE);
-      text(40 + w - 140, y + 37, f.today != null ? String(f.today) : '—', 24, f.today != null ? PALETTE[4] : WHITE, f.today != null ? 1 : 0.3, 'right');
-      text(40 + w - 16, y + 37, f.classic != null ? String(f.classic) : '—', 24, WHITE, f.classic != null ? 1 : 0.3, 'right');
-      if (!f.mine) friendRects.push({ r, kind: 'friend', code: f.code, name: f.name || tr('player') });
+      text(40 + w - 220, y + 37, f.today != null ? String(f.today) : '—', 24, f.today != null ? PALETTE[4] : WHITE, f.today != null ? 1 : 0.3, 'right');
+      text(40 + w - 96, y + 37, f.classic != null ? String(f.classic) : '—', 24, WHITE, f.classic != null ? 1 : 0.3, 'right');
+      if (!f.mine) {
+        // VS on the right: a live match with this friend.
+        const vs = { x: 40 + w - 76, y: y + 10, w: 66, h: 38 };
+        roundRect(vs, 19); ctx.fillStyle = rgba(hex(MODE_COLORS.versus)); ctx.fill();
+        ctx.font = `800 18px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = rgba(INK);
+        ctx.fillText('VS', vs.x + vs.w / 2, vs.y + vs.h / 2 + 1);
+        friendRects.push({ r: grow(vs, 8), kind: 'versus', code: f.code }, { r, kind: 'friend', code: f.code, name: f.name || tr('player') });
+      }
       y += 66;
     });
 
@@ -2759,6 +2987,30 @@
       ctx.fillStyle = g; ctx.fillRect(0, bottom - 90, W, 90);
     }
     centered(tr('tap_back'), H * 0.9, 22, WHITE, 0.5);
+  }
+
+  // The versus room: waiting for the friend, then 3, 2, 1.
+  const versusButtons = () => versus.phase === 'waiting'
+    ? [{ id: 'share', x: W / 2 - 210, y: H * 0.72, w: 420, h: 88 }, { id: 'cancel', x: W / 2 - 210, y: H * 0.72 + 108, w: 420, h: 84 }]
+    : [];
+  function drawVersus() {
+    ctx.fillStyle = rgba(BG_BOTTOM, 0.85); ctx.fillRect(0, 0, W, H);
+    const c = hex(MODE_COLORS.versus), me = (playerName || tr('player')).toUpperCase();
+    iconText('versus', W / 2, H * 0.14, tr('versus'), 30, c);
+    const opp = versus.opp ? oppName().toUpperCase() : '?';
+    centered(`${me}  ·  ${opp}`, H * 0.22, 36, WHITE);
+    if (versus.phase === 'countdown' && versus.start) {
+      const left = Math.max(0, versus.start.at - Date.now()), n = Math.ceil(left / 1000), k = (left % 1000) / 1000;
+      centered(n > 0 ? String(n) : tr('vs_go'), H * 0.45, 150 + 60 * k, c, clamp(0.4 + k, 0, 1));
+    } else {
+      const dots = '.'.repeat(1 + Math.floor(time * 2) % 3);
+      centered(tr('vs_waiting', versus.opp ? opp : tr('vs_friend')) + dots, H * 0.4, 30, WHITE, 0.85);
+      centered(tr('vs_room', formatCode(versus.room)), H * 0.4 + 44, 18, WHITE, 0.45);
+    }
+    centered(tr('vs_rules'), H * 0.56, 22, WHITE, 0.75);
+    centered(tr('vs_rules_2'), H * 0.56 + 32, 22, c, 0.85);
+    const look = { share: [tr('vs_share'), c, 1, INK], cancel: [tr('cancel'), WHITE, 0.1, WHITE] };
+    for (const r of versusButtons()) button(r, ...look[r.id]);
   }
 
   // A duel before playing it: who challenges you and with what; the replies so far.
@@ -3160,6 +3412,7 @@
     if (mode === 'zen') iconText('zen', W - 28, 72, tr('mode_zen'), 26, hex(MODE_COLORS.zen), 0.7, 'right');
     if (mode === 'hardcore') iconText('hardcore', W - 24, 104, tr('mode_hardcore'), 18, hex(MODE_COLORS.hardcore), 0.85, 'right');
     if (mode === 'duel' && social.duel) drawGhost();
+    if (mode === 'versus' && versus.start) drawOpponent();
     if (mode === 'sprint') {
       // Time left, red in the last 10 seconds, with a bar under it.
       const secs = Math.ceil(clock), low = clock < 10;
@@ -3186,7 +3439,7 @@
       }
     }
     if (state === STATE.PLAYING) {
-      drawPauseIcon(pauseButton());
+      if (mode !== 'versus') drawPauseIcon(pauseButton());
       drawTurnArrow(96, H - 110, -1, 0.12 + 0.6 * arrowFlash[0]);
       drawTurnArrow(W - 96, H - 110, 1, 0.12 + 0.6 * arrowFlash[1]);
     }
@@ -3226,6 +3479,22 @@
     const t = clamp(gameOverTime * 3, 0, 1);
     ctx.fillStyle = rgba(BG_BOTTOM, 0.8 * t); ctx.fillRect(0, 0, W, H);
     const slide = (1 - t) * 40;
+    if (mode === 'versus') {
+      // Out or out of time; then the room's verdict.
+      const r = versus.result, opp = oppName().toUpperCase(), you = versus.you;
+      const title = !r ? tr(lives <= 0 ? 'vs_dead' : 'vs_time')
+        : r.winner < 0 ? tr('duel_draw') : r.winner === you ? tr('duel_win') : tr('duel_lose');
+      const c = !r ? WHITE : r.winner < 0 ? PALETTE[2] : r.winner === you ? PALETTE[3] : PALETTE[0];
+      iconText('versus', W / 2, H * 0.27 - 76 + slide, tr('versus'), 24, hex(MODE_COLORS.versus), t);
+      centered(title, H * 0.27 + slide, 68, c, t);
+      centered(String(r ? r.scores[you] : score), H * 0.41 + slide, 130, WHITE, t);
+      const line = r ? tr('duel_score', r.scores[you], opp, r.scores[1 - you] ?? 0) : tr('vs_wait_result', opp, versus.opp ? versus.opp.score : 0);
+      centered(line, H * 0.41 + 50 + slide, 24, WHITE, 0.7 * t);
+      if (r && r.reason === 'left') centered(tr('vs_forfeit', r.winner === you ? opp : tr('vs_friend')), H * 0.41 + 90 + slide, 20, WHITE, 0.55 * t);
+      else if (r && versus.oppRematch && !versus.rematch) centered(tr('rematch_asked', opp), H * 0.41 + 90 + slide, 22, hex(MODE_COLORS.versus), t);
+      drawGameOverButtons();
+      return;
+    }
     if (mode === 'duel' && social.duel) {
       // The verdict against the duel's owner.
       const o = social.duel.owner, name = (o.name || tr('player')).toUpperCase();
@@ -3257,6 +3526,7 @@
     if (gameOverTime <= 0.6) return;
     const look = { replay: [tr('replay'), PALETTE[2], 1, INK], share: [tr('share'), PALETTE[4], 1, INK],
       duel: [tr('duel'), hex(MODE_COLORS.duel), 1, INK], sendback: [tr('duel_send_back'), hex(MODE_COLORS.duel), 1, INK],
+      rematch: versus.rematch ? [tr('rematch_wait'), WHITE, 0.1, WHITE] : [tr('rematch'), hex(MODE_COLORS.versus), 1, INK],
       menu: [tr('menu'), WHITE, 0.1, WHITE] };
     for (const r of gameOverButtons()) button(r, ...look[r.id]);
   }
@@ -3279,6 +3549,7 @@
     else if (state === STATE.AWARDS) drawAwards();
     else if (state === STATE.FRIENDS) drawFriends();
     else if (state === STATE.DUEL) drawDuel();
+    else if (state === STATE.VERSUS) drawVersus();
     else if (state === STATE.SPLASH) { /* drawn with the shape, above */ }
     else {
       drawPlay();

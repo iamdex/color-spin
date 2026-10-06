@@ -12,5 +12,7 @@
       "database_id": "72db9186-a23d-4e8e-8966-f0bd4a3aef79"
     }
   ],
+  "durable_objects": { "bindings": [{ "name": "MATCH", "class_name": "Match" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Match"] }],
   "observability": { "enabled": true }
 }

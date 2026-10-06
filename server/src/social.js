@@ -8,6 +8,7 @@
 //   GET  /v1/duels?player=<id>                        -> { duels }   (mine and the ones I played)
 //   GET  /v1/duels/<id>?player=<id>                   -> a duel
 //   POST /v1/duels/<id>      { player, score, level, hits, duration, ghost } -> the duel
+//   POST /v1/versus          { player, code }         -> { room }    (invites that friend)
 //
 // Every player has a public friend code (8 characters); the player id stays
 // secret, since it is what allows writing. Friends see each other's name, best
@@ -19,6 +20,7 @@ const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I
 const MAX_FRIENDS = 200;
 const MAX_GHOST = 1800;        // samples, one per second of play
 const DUELS_PER_MINUTE = 10;
+const INVITE_LIFE = 3 * 60 * 1000; // a versus invite shows for 3 minutes
 
 // The name only changes when one is sent.
 const nameOf = (h, body) => typeof body.name === 'string' ? h.cleanName(body.name) : null;
@@ -70,7 +72,12 @@ async function friendsOf(db, player, day) {
   const { results } = await db.prepare(
     `${sql} JOIN friends f ON f.friend = p.player WHERE f.player = ? ORDER BY f.created_at`
   ).bind(day, player).all();
-  return { me, friends: results };
+  // Versus invites from friends, still fresh.
+  const invites = (await db.prepare(
+    `SELECT v.room, p.name, p.code FROM versus_invites v JOIN profiles p ON p.player = v.host
+     WHERE v.guest = ? AND v.created_at > ? ORDER BY v.created_at DESC LIMIT 3`
+  ).bind(player, Date.now() - INVITE_LIFE).all()).results;
+  return { me, friends: results, invites };
 }
 
 async function duelView(db, id, player) {
@@ -162,6 +169,22 @@ export async function social(request, url, env, h) {
       if (res.meta.changes) return h.json({ id });
     }
     throw new Error('no free duel id');
+  }
+
+  if (path === '/v1/versus' && body) {
+    const code = typeof body.code === 'string' ? body.code.toUpperCase().replace(/[^A-Z0-9]/g, '') : '';
+    const friend = validCode(code) && await db.prepare(
+      'SELECT p.player FROM profiles p JOIN friends f ON f.friend = p.player WHERE p.code = ? AND f.player = ?'
+    ).bind(code, player).first();
+    if (!friend) return h.fail(404, 'not a friend');
+    const { n } = await db.prepare('SELECT COUNT(*) AS n FROM versus_invites WHERE host = ? AND created_at > ?').bind(player, now - 60000).first();
+    if (n >= DUELS_PER_MINUTE) return h.fail(429, 'slow down');
+    const room = randomCode();
+    await db.batch([
+      db.prepare('DELETE FROM versus_invites WHERE created_at < ?').bind(now - INVITE_LIFE),
+      db.prepare('INSERT INTO versus_invites (room, host, guest, created_at) VALUES (?, ?, ?, ?)').bind(room, player, friend.player, now),
+    ]);
+    return h.json({ room });
   }
 
   const m = path.match(/^\/v1\/duels\/([A-Z2-9]{8})$/);

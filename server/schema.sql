@@ -84,3 +84,12 @@ CREATE TABLE IF NOT EXISTS duel_results (
   PRIMARY KEY (duel, player)
 );
 CREATE INDEX IF NOT EXISTS duel_results_player ON duel_results (player);
+
+-- Versus invites: a friend asked you to a match in this room (they last a few minutes).
+CREATE TABLE IF NOT EXISTS versus_invites (
+  room TEXT PRIMARY KEY,
+  host TEXT NOT NULL,
+  guest TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS versus_invites_guest ON versus_invites (guest, created_at);

@@ -13,10 +13,14 @@
 // are never sent back: a player id is what allows writing to that row.
 // A POST keeps the player's best score and always updates their name.
 // /v1/daily is the same board for one day of the daily challenge, /v1/sprint
-// and /v1/hardcore the ones of those modes. Friends and duels are in social.js.
+// and /v1/hardcore the ones of those modes. Friends, duels and versus invites
+// are in social.js; a versus match itself is a Durable Object (match.js), at
+// /v1/versus/<room>/ws.
 
 import { isOffensive } from './names.js';
 import { social } from './social.js';
+
+export { Match } from './match.js';
 
 const TOP_SIZE = 10;
 const NAME_MAX = 14;           // same as the name field in the game
@@ -141,7 +145,9 @@ export default {
     const kind = { '/v1/scores': 'scores', '/v1/daily': 'daily', '/v1/sprint': 'sprint', '/v1/hardcore': 'hardcore' }[url.pathname];
     try {
       if (!kind) {
-        if (/^\/v1\/(profile|friends|duels)(\/|$)/.test(url.pathname)) {
+        const room = url.pathname.match(/^\/v1\/versus\/([A-Z2-9]{8})\/ws$/);
+        if (room) return env.MATCH.get(env.MATCH.idFromName(room[1])).fetch(request);
+        if (/^\/v1\/(profile|friends|duels|versus)(\/|$)/.test(url.pathname)) {
           return await social(request, url, env, { json, fail, cleanName, checkGame, validPlayer, validDay });
         }
         return fail(404, 'not found');
