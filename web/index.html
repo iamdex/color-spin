@@ -1697,7 +1697,7 @@
   const versus = {
     room: '', ws: null, phase: 'idle', // idle | waiting | countdown | playing | over
     you: 0, names: [], opp: null, start: null, result: null, rematch: false, oppRematch: false,
-    sendT: 0, retries: 0, beat: 0, pingT: 0, lastMsg: 0, warned: false,
+    sendT: 0, retries: 0, beat: 0, pingT: 0, lastMsg: 0, warned: false, ponged: false,
     turbo: 0, cham: 0, spin: 0, spinT: 0, sent: null, // attacks received, and the last one sent
   };
   const oppName = () => versus.names[1 - versus.you] || tr('vs_friend');
@@ -1739,9 +1739,12 @@
   }
   // Back from the background (or the network): reconnect at once if the socket
   // is gone, or has been silent too long to trust.
+  // Silence only means a dead socket with a server that answers pings (an older
+  // one stays quiet in the waiting room).
+  const vsSilent = () => versus.ponged && Date.now() - versus.lastMsg > 15000;
   function versusWake() {
     if (!versus.room || versus.phase === 'idle') return;
-    const ws = versus.ws, silent = Date.now() - versus.lastMsg > 15000;
+    const ws = versus.ws, silent = vsSilent();
     if (ws && ws.readyState === 1 && !silent) return;
     if (ws && ws.readyState === 0 && !silent) return;
     versus.ws = null; versus.retries = 0;
@@ -1749,7 +1752,8 @@
     connectVersus();
   }
   function versusMessage(m) {
-    if (m.t === 'joined') {
+    if (m.t === 'pong') versus.ponged = true;
+    else if (m.t === 'joined') {
       versus.you = m.you; versus.names = m.names; versus.retries = 0;
       if (m.opp) versus.opp = { ...blankOpp(), ...m.opp };
       if (m.phase === 'playing' && m.seed) versusStart(m, true);
@@ -2617,7 +2621,7 @@
     if (versus.ws && versus.ws.readyState === 1) {
       // Heartbeat: a ping every 5 s; nothing heard for 15 s means a dead socket.
       if ((versus.pingT -= dt) <= 0) { versus.pingT = 5; vsSend({ t: 'ping' }); }
-      if (Date.now() - versus.lastMsg > 15000) versusWake();
+      if (vsSilent()) versusWake();
     }
     if (mode === 'versus' && state === STATE.GAME_OVER && !versus.result && gameOverTime > 12 && !versus.warned) {
       versus.warned = true; showToast(tr('vs_offline'));
