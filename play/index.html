@@ -59,7 +59,7 @@
                   FRIENDS: 9, DUEL: 10, VERSUS: 11 };
   const SPLASH_TIME = 3.3; // the opening: the logo builds itself, the title, the author
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
-  const VERSION = '2.1.0';
+  const VERSION = '2.3.0';
   // Hits in a row for x2, x3 and x4. A miss starts the count again.
   const COMBO_STEPS = [10, 25, 50];
   const JOLLY_POINTS = 3, SLOW_TIME = 5, SLOW_FACTOR = 0.5;
@@ -114,8 +114,11 @@
     { id: 'zen', top: '#1c2e36', bottom: '#081014' },
     { id: 'ember', top: '#3d130c', bottom: '#0c0402' },
     { id: 'gold', top: '#33270d', bottom: '#0b0803' },
+    { id: 'aurora', top: '#0c3b36', bottom: '#12072a' },
   ];
-  const TRAILS = ['classic', 'comet', 'sparkle', 'stars', 'rainbow'];
+  const TRAILS = ['classic', 'comet', 'sparkle', 'stars', 'rainbow', 'fire'];
+  // Looks won with the stars of the daily missions.
+  const STAR_REWARDS = [[12, 'theme:aurora'], [30, 'trail:fire']];
   // Awards and what each one unlocks; the conditions are in checkAwards().
   const AWARDS = [
     ['first', 'theme:ocean'], ['pentagon', 'trail:comet'], ['score_100', 'theme:forest'],
@@ -140,6 +143,8 @@
       "banner_combo": "Combo x%d!",
       "banner_heart": "+1 vita",
       "banner_slow": "Rallentatore!",
+      "banner_rush": "RAFFICA!",
+      "clutch": "ALL'ULTIMO!",
       "hud_combo": "COMBO %d",
       "daily": "SFIDA #%d",
       "daily_today": "OGGI %d",
@@ -246,10 +251,29 @@
       },
       "themes": {
         "night": "NOTTE", "ocean": "OCEANO", "forest": "FORESTA", "sunset": "TRAMONTO",
-        "neon": "NEON", "zen": "ZEN", "ember": "BRACE", "gold": "ORO"
+        "neon": "NEON", "zen": "ZEN", "ember": "BRACE", "gold": "ORO", "aurora": "AURORA"
       },
       "trails": {
-        "classic": "CLASSICA", "comet": "COMETA", "sparkle": "SCINTILLE", "stars": "STELLE", "rainbow": "ARCOBALENO"
+        "classic": "CLASSICA", "comet": "COMETA", "sparkle": "SCINTILLE", "stars": "STELLE", "rainbow": "ARCOBALENO", "fire": "FUOCO"
+      },
+      "missions": "MISSIONI DI OGGI",
+      "mission_done": "MISSIONE COMPIUTA",
+      "missions_all": "TUTTE E TRE! +2",
+      "stars_next": "%d PER %s",
+      "stars_all": "TUTTO SBLOCCATO",
+      "locked_stars": "Si sblocca con %d stelle delle missioni",
+      "reward_unlocked": "SBLOCCATO: %s",
+      "mission_list": {
+        "combo": "Combo da %d",
+        "score": "%d punti in Classica",
+        "shape": "Arriva al livello %d",
+        "specials": "Prendi %d palline speciali",
+        "clutch": "%d salvataggi all'ultimo",
+        "sprint": "%d punti in 60 secondi",
+        "games": "Finisci %d partite",
+        "daily": "Gioca la sfida del giorno",
+        "zen": "%d palline in Zen",
+        "hardcore": "Livello %d in Hardcore"
       },
       "mode_classic": "CLASSICA",
       "mode_sprint": "60 SECONDI",
@@ -286,7 +310,10 @@
         "heart": ["CUORE", "Sul suo colore: +1 vita"],
         "jolly": ["ARCOBALENO", "Va bene su ogni lato: punti x3"],
         "slow": ["CLESSIDRA", "Sul suo colore: rallenta tutto"],
-        "chameleon": ["CAMALEONTE", "Cambia colore all'ultimo!"]
+        "chameleon": ["CAMALEONTE", "Cambia colore all'ultimo!"],
+        "rush": ["RAFFICA", "Una fila di palline dalla stessa parte"],
+        "clutch": ["ALL'ULTIMO!", "Giri proprio prima del colpo: +1 punto"],
+        "twins": ["GEMELLE", "A metà strada si divide: due colori di fila"]
       },
       "game_over": "GAME OVER",
       "points_level": "PUNTI  ·  LIVELLO %d  ·  COMBO %d",
@@ -398,6 +425,8 @@
       "banner_combo": "Combo x%d!",
       "banner_heart": "+1 life",
       "banner_slow": "Slow motion!",
+      "banner_rush": "RUSH!",
+      "clutch": "CLUTCH!",
       "hud_combo": "COMBO %d",
       "daily": "CHALLENGE #%d",
       "daily_today": "TODAY %d",
@@ -504,10 +533,29 @@
       },
       "themes": {
         "night": "NIGHT", "ocean": "OCEAN", "forest": "FOREST", "sunset": "SUNSET",
-        "neon": "NEON", "zen": "ZEN", "ember": "EMBER", "gold": "GOLD"
+        "neon": "NEON", "zen": "ZEN", "ember": "EMBER", "gold": "GOLD", "aurora": "AURORA"
       },
       "trails": {
-        "classic": "CLASSIC", "comet": "COMET", "sparkle": "SPARKLE", "stars": "STARS", "rainbow": "RAINBOW"
+        "classic": "CLASSIC", "comet": "COMET", "sparkle": "SPARKLE", "stars": "STARS", "rainbow": "RAINBOW", "fire": "FIRE"
+      },
+      "missions": "TODAY'S MISSIONS",
+      "mission_done": "MISSION COMPLETE",
+      "missions_all": "ALL THREE! +2",
+      "stars_next": "%d FOR %s",
+      "stars_all": "ALL UNLOCKED",
+      "locked_stars": "Unlocked with %d mission stars",
+      "reward_unlocked": "UNLOCKED: %s",
+      "mission_list": {
+        "combo": "A combo of %d",
+        "score": "%d points in Classic",
+        "shape": "Reach level %d",
+        "specials": "Catch %d special balls",
+        "clutch": "%d last-instant saves",
+        "sprint": "%d points in 60 seconds",
+        "games": "Finish %d games",
+        "daily": "Play the daily challenge",
+        "zen": "%d balls in Zen",
+        "hardcore": "Level %d in Hardcore"
       },
       "mode_classic": "CLASSIC",
       "mode_sprint": "60 SECONDS",
@@ -544,7 +592,10 @@
         "heart": ["HEART", "On its color: +1 life"],
         "jolly": ["RAINBOW", "Fits any side: 3x points"],
         "slow": ["HOURGLASS", "On its color: slows everything down"],
-        "chameleon": ["CHAMELEON", "Changes color at the last moment!"]
+        "chameleon": ["CHAMELEON", "Changes color at the last moment!"],
+        "rush": ["RUSH", "A string of balls from one side"],
+        "clutch": ["CLUTCH!", "Turn right before the hit: +1 point"],
+        "twins": ["TWINS", "Splits halfway: two colors in a row"]
       },
       "game_over": "GAME OVER",
       "points_level": "POINTS  ·  LEVEL %d  ·  COMBO %d",
@@ -687,8 +738,55 @@
   // got: award id -> when it was won; caught: the special balls ever caught.
   const awardsRec = loadJSON(AWARDS_KEY, {});
   awardsRec.got ||= {}; awardsRec.caught ||= [];
+  // Daily missions: three a day, the same for everyone, from the pool below.
+  // [kind, targets, how progress counts: 'max' (best of today) or 'add' (today's total)]
+  const MISSIONS_KEY = 'color-spin-missions';
+  const MISSION_POOL = [
+    ['combo', [15, 25, 35], 'max'], ['score', [50, 100, 150], 'max'], ['shape', [7, 10, 13], 'max'],
+    ['specials', [3, 5], 'add'], ['clutch', [2, 4], 'add'], ['sprint', [30, 45], 'max'],
+    ['games', [3, 5], 'add'], ['daily', [1], 'add'], ['zen', [40, 80], 'add'], ['hardcore', [3, 5], 'max'],
+  ];
+  // day, list: [[kind, target]], prog: kind -> value, done: kind -> true, stars, seen: last day the page was opened.
+  const missionsRec = loadJSON(MISSIONS_KEY, {});
+  missionsRec.stars ||= 0;
+  function missionsToday() {
+    const day = today();
+    if (missionsRec.day !== day) {
+      const r = seededRandom(`missions-${day}`), pool = MISSION_POOL.slice();
+      const list = [];
+      while (list.length < 3) {
+        const [kind, targets] = pool.splice(r() * pool.length | 0, 1)[0];
+        list.push([kind, targets[r() * targets.length | 0]]);
+      }
+      Object.assign(missionsRec, { day, list, prog: {}, done: {} });
+      saveJSON(MISSIONS_KEY, missionsRec);
+    }
+    return missionsRec.list;
+  }
+  const missionsLeft = () => missionsToday().filter(([k]) => !missionsRec.done[k]).length;
+  // Counts toward today's missions: a new best for 'max' kinds, one more for 'add' ones.
+  function mission(kind, value = 1) {
+    const m = missionsToday().find(([k]) => k === kind);
+    if (!m || missionsRec.done[kind]) return;
+    const how = MISSION_POOL.find(([k]) => k === kind)[2];
+    missionsRec.prog[kind] = how === 'max' ? Math.max(missionsRec.prog[kind] || 0, value) : (missionsRec.prog[kind] || 0) + value;
+    if (missionsRec.prog[kind] >= m[1]) {
+      const before = missionsRec.stars;
+      missionsRec.done[kind] = true;
+      missionsRec.stars += 1;
+      const all = !missionsLeft();
+      if (all) missionsRec.stars += 2;
+      awardQueue.push({ text: tr(all ? 'missions_all' : 'mission_done'), time: AWARD_TIME });
+      for (const [n, reward] of STAR_REWARDS) {
+        if (before < n && missionsRec.stars >= n) awardQueue.push({ text: tr('reward_unlocked', rewardName(reward)), time: AWARD_TIME });
+      }
+      if (awardQueue.length <= 2) sfx.play('figure');
+    }
+    saveJSON(MISSIONS_KEY, missionsRec);
+  }
   const isUnlocked = reward => reward === 'theme:night' || reward === 'trail:classic' ||
-    AWARDS.some(([id, r]) => r === reward && awardsRec.got[id]);
+    AWARDS.some(([id, r]) => r === reward && awardsRec.got[id]) ||
+    STAR_REWARDS.some(([n, r]) => r === reward && missionsRec.stars >= n);
   const look = loadJSON(LOOK_KEY, {});
   if (!isUnlocked(`theme:${look.theme}`)) look.theme = 'night';
   if (!isUnlocked(`trail:${look.trail}`)) look.trail = 'classic';
@@ -736,6 +834,12 @@
   function trailPiece(style, x, y, i, len, c, r = BALL_RADIUS) {
     const t = 1 - (i + 1) / (len + 1);
     const tc = style === 'rainbow' ? PALETTE[(i + Math.floor(time * 12)) % PALETTE.length] : c;
+    if (style === 'fire') {
+      // Yellow at the ball, then orange, then red, flickering.
+      const fc = i < len * 0.3 ? PALETTE[2] : i < len * 0.65 ? PALETTE[5] : PALETTE[0];
+      circle(x + Math.sin(time * 31 + i * 1.7) * 2.5 * r / 16, y + Math.cos(time * 27 + i) * 2.5 * r / 16, r * (0.4 + 0.7 * t), rgba(fc, 0.42 * t));
+      return;
+    }
     if (style === 'stars') {
       if (i % 3 === 1) drawSymbol('star', x, y, r * (0.4 + 0.6 * t), rgba(tc, 0.6 * t));
       return;
@@ -800,6 +904,17 @@
     lit: [], litColor: [], show: null,
     light(i, c = WHITE) { this.lit[i] = 1; this.litColor[i] = c; },
     showSide(i) { this.show = { i, t: 0.75 }; },
+    // How far from the center a ball coming along angle a touches side i, with
+    // the shape turned so that side faces it.
+    catchDistance(a, i) {
+      const st = this.step();
+      for (let t = 0; t < this.sides; t++) {
+        if (Math.floor(fposmod(a - t * st - this.baseAngle, TAU) / st) % this.sides !== i) continue;
+        const normal = this.baseAngle + (i + 0.5) * st + t * st;
+        return SHAPE_RADIUS * Math.cos(Math.PI / this.sides) / Math.cos(angleDiff(normal, a)) + BALL_RADIUS;
+      }
+      return SHAPE_RADIUS + BALL_RADIUS;
+    },
     // Points out the side a new shape just gained (the last color).
     highlightNew() { this.hl = 1.8; },
     hl: 0,
@@ -1125,6 +1240,17 @@
     },
     setSlow(on) { this.slow = on; this.bpm = this.gameBpm * (on ? 0.75 : 1); },
     setDucked(on) { this.ducked = on; this.updateMaster(); },
+    // Seconds from now to an eighth note of the music, near `want` and not before
+    // `min`; null when no music is playing (or in slow motion, at another tempo).
+    // Counts the output latency, so it's when the beat is heard.
+    beatIn(want, min) {
+      if (!this.ctx || !this.playing || this.muted || this.slow || this.ctx.state !== 'running') return null;
+      const s16 = 60 / this.bpm / 4, s8 = 2 * s16, lat = this.ctx.outputLatency || this.ctx.baseLatency || 0;
+      const first = this.nextTime + (this.step % 2 ? s16 : 0) + lat - this.ctx.currentTime;
+      let d = first + Math.max(0, Math.round((want - first) / s8)) * s8;
+      while (d < min) d += s8;
+      return d;
+    },
     // The last life: the music goes muffled, as if heard from under water.
     danger: false,
     setDanger(on) {
@@ -1971,6 +2097,11 @@
   // hitStop: the game holds still for an instant on a new multiplier.
   let hitStop = 0;
   const HIT_STOP = 0.075;
+  // rush: a string of balls from one side, past the octagon (see startRush);
+  // lastArrive: when the latest ball will land, so two never land together;
+  // turnLog: the player's recent turns, for the clutch bonus.
+  let rush = null, lastArrive = 0, turnLog = [];
+  const RUSH_BALLS = 8, RUSH_WARN = 1.2, MIN_ARRIVE_GAP = 0.3, CLUTCH_TIME = 0.16;
   // calm: see CALM_BALLS; the rest is combo feedback (flash, zoom kick, every-10 pop, lost combo).
   // gameSeed: classic games are seeded too, so any of them can become a duel;
   // ghostRec: the score at every second of play, the duel's ghost.
@@ -2034,6 +2165,7 @@
     balls = []; clearFx();
     score = 0; lives = maxLives; level = 1; newBest = false; spawnTimer = 1;
     hits = 0; bestStreak = 0; comboPop = 0; slowTime = 0; hint = null; hintNext = null; hitStop = 0;
+    rush = null; lastArrive = 0; turnLog = [];
     calm = 0; comboFlash = 0; kick = 0; milestone = null; comboLost = null;
     streak = 0; lastRank = 0; lastGameImproved = false; playTime = 0;
     state = STATE.PLAYING; fade = 1;
@@ -2074,6 +2206,14 @@
   const spawnInterval = () => Math.max(0.5, 1.7 - 0.18 * pace()) * calmK();
   const maxBalls = () => Math.min(level + 1, 3 + tier(level), calm > 0 ? 2 : 99);
   const multiplier = () => 1 + COMBO_STEPS.filter(n => streak >= n).length;
+  // Never past two balls a second (the server's limit), but quicker than usual.
+  const rushGap = () => Math.max(0.5, 0.7 * spawnInterval());
+  // Past the octagon, every third level: a rush from one side, announced, then a breather.
+  function startRush() {
+    rush = { dir: level % 4, left: RUSH_BALLS, warn: RUSH_WARN };
+    spawnTimer = 0; showBanner(tr('banner_rush')); sfx.play('figure'); haptic('medium');
+    introduce('rush');
+  }
 
   // Special balls, unlocked as the game goes on: [kind, from level, chance per ball].
   // The chameleon keeps getting more frequent, so the game still changes past the octagon.
@@ -2082,13 +2222,14 @@
     ['jolly', 8, () => 0.05], // not at 7: the pentagon is enough news
     ['slow', 10, () => slowTime > 0 || balls.some(b => b.kind === 'slow') ? 0 : 0.03],
     ['chameleon', 16, from => Math.min(0.12 + 0.02 * (level - from), 0.4)],
+    ['twins', 20, () => 0.06],
   ];
   function pickSpecial(roll) {
     let p = 0;
     for (const [kind, usual, chance] of SPECIALS) {
       // The rule of the day can bring a ball in earlier or make it more frequent.
       // Zen has nothing to win back and no surprises.
-      if (mode === 'zen' && (kind === 'heart' || kind === 'chameleon')) continue;
+      if (mode === 'zen' && (kind === 'heart' || kind === 'chameleon' || kind === 'twins')) continue;
       if (mode === 'hardcore' && kind === 'heart') continue;
       const [from, often] = mode === 'hardcore' && kind === 'chameleon' ? [10]
         : (twist.special && twist.special[kind]) || [usual];
@@ -2115,11 +2256,24 @@
 
   function spawnBall() {
     // Always four draws per ball, so the daily sequence stays the same for everyone.
-    const [dx, dy] = SPAWN_DIRS[rng() * 4 | 0];
+    let [dx, dy] = SPAWN_DIRS[rng() * 4 | 0];
     const ci = rng() * shape.sides | 0, other = rng();
     let kind = pickSpecial(rng());
+    if (rush) {
+      // The rush keeps the draws above (the daily sequence stays the same) but takes its lane.
+      [dx, dy] = SPAWN_DIRS[rush.dir];
+      if (kind === 'chameleon' || kind === 'twins') kind = null;
+      if (--rush.left <= 0) { rush = null; calm = 4; }
+    }
     const dist = Math.abs(dx) * W / 2 + Math.abs(dy) * H / 2 + BALL_RADIUS;
     let v = (dist - SHAPE_RADIUS) / travelTime();
+    // On the beat: the ball lands on an eighth note of the music, a touch earlier or
+    // later than usual, and never together with the one before.
+    const arrive = music.beatIn(travelTime(), lastArrive + MIN_ARRIVE_GAP - playTime);
+    if (arrive !== null && slowTime <= 0) {
+      v = (dist - shape.catchDistance(Math.atan2(dy, dx), ci)) / arrive;
+      lastArrive = playTime + arrive;
+    } else lastArrive = playTime + travelTime();
     // Versus attacks: chameleons instead of plain balls, faster balls.
     if (mode === 'versus' && versus.cham > 0 && !kind) { kind = 'chameleon'; versus.cham--; }
     if (mode === 'versus' && versus.turbo > 0) { v *= 1.45; versus.turbo--; }
@@ -2130,9 +2284,17 @@
       b.switchAt = SHAPE_RADIUS + v * 0.7;
       b.switchTo = (ci + 1 + (other * (shape.sides - 1) | 0)) % shape.sides;
     }
+    // Twins: halfway it splits, and a second ball of another color follows a beat later.
+    if (kind === 'twins') {
+      b.splitAt = (dist + SHAPE_RADIUS) / 2;
+      b.twinCi = (ci + 1 + (other * (shape.sides - 1) | 0)) % shape.sides;
+      b.twinGap = Math.max(0.45, music.playing && !music.muted && !music.slow ? 60 / music.bpm : 0.5);
+      lastArrive += b.twinGap;
+    }
     balls.push(b);
     if (kind) introduce(kind);
     if (calm > 0) calm--;
+    return b;
   }
 
   function checkHits() {
@@ -2153,7 +2315,20 @@
     shape.light(side);
     sfx.chime(streak); streak++; hits++;
     bestStreak = Math.max(bestStreak, streak);
-    const mult = multiplier(), points = (b.kind === 'jolly' ? JOLLY_POINTS : 1) * mult;
+    // Clutch: the side was wrong a moment ago and a last-instant turn saved it.
+    let clutch = false;
+    if (b.kind !== 'jolly' && turnLog.length && playTime - turnLog[turnLog.length - 1][0] < CLUTCH_TIME) {
+      const before = turnLog.find(([t]) => playTime - t < CLUTCH_TIME)[1], now = shape.turns;
+      shape.turns = before;
+      clutch = shape.sideAt(Math.atan2(b.y, b.x)) !== b.ci;
+      shape.turns = now;
+    }
+    const mult = multiplier(), points = (b.kind === 'jolly' ? JOLLY_POINTS : 1 + clutch) * mult;
+    if (clutch) {
+      const len = Math.hypot(b.x, b.y) || 1;
+      floatText(b.x + b.x / len * 50, b.y + b.y / len * 50 - 40, tr('clutch'), PALETTE[6]);
+      ring(b.x, b.y, PALETTE[6], 20, 110, 0.45); sfx.play('milestone'); introduce('clutch');
+    }
     score += points; scorePop = 1; shape.pulse();
     const color = b.kind === 'jolly' ? jollyColor(b) : b.color;
     burst(b.x, b.y, color); ring(b.x, b.y, color, 10, 70);
@@ -2181,6 +2356,9 @@
     if (b.kind === 'jolly') { sfx.play('power'); for (const c of shape.colors) burst(b.x, b.y, c, 3, 320); }
     if (hits % POINTS_PER_LEVEL === 0) levelUp();
     if (b.kind && !awardsRec.caught.includes(b.kind)) awardsRec.caught.push(b.kind);
+    if (b.kind) mission('specials');
+    if (clutch) mission('clutch');
+    if (mode === 'zen') mission('zen'); else mission('combo', streak);
     checkAwards();
   }
 
@@ -2205,6 +2383,8 @@
 
   function levelUp() {
     level++;
+    if (mode !== 'zen') mission('shape', level);
+    if (mode === 'hardcore') mission('hardcore', level);
     music.setLevel(...musicLevel());
     const n = sidesForLevel(level);
     if (n !== shape.sides) {
@@ -2219,6 +2399,7 @@
       if (lives < maxLives) { lives++; showBanner(tr('banner_life', level)); return; }
     } else {
       sfx.play('level');
+      if (mode !== 'zen' && tier(level) === MAX_SIDES - MIN_SIDES && level % 3 === 0 && !rush) { startRush(); return; }
     }
     showBanner(tr('banner_level', level));
   }
@@ -2233,7 +2414,13 @@
     finishGame();
   }
   function finishGame() {
-    try { recordGame(); } finally { checkAwards(); }
+    try { recordGame(); } finally {
+      checkAwards();
+      mission('games');
+      if (mode === 'classic') mission('score', score);
+      if (mode === 'sprint') mission('sprint', score);
+      if (mode === 'daily') mission('daily');
+    }
   }
   function recordGame() {
     sfx.play('game_over'); music.stop();
@@ -2362,6 +2549,7 @@
         markSocialSeen(); refreshSocial();
       } else if (action === 'tap' && hit(menuButtons()[5], pos)) {
         sfx.play('click'); state = STATE.AWARDS; fade = 0.6; pageScroll = pageVel = 0;
+        missionsRec.seen = today(); saveJSON(MISSIONS_KEY, missionsRec);
       } else if (action === 'tap' && hit(menuButtons()[2], pos)) {
         start('daily');
       } else if (action === 'left' || action === 'right' || (action === 'tap' && (hit(menuButtons()[3], pos) || hit(menuButtons()[4], pos)))) {
@@ -2383,6 +2571,8 @@
       else if (action === 'right' || action === 'confirm') dir = 1;
       else if (action === 'tap') dir = pos.x < W / 2 ? -1 : 1;
       if (dir) {
+        turnLog.push([playTime, shape.turns]);
+        if (turnLog.length > 8) turnLog.shift();
         shape.rotateStep(dir);
         sfx.play(dir < 0 ? 'turn_left' : 'turn_right');
         arrowFlash[dir < 0 ? 0 : 1] = 1;
@@ -2610,7 +2800,10 @@
     worldY = H / 2 + rand(-1, 1) * shake;
 
     shape.update(dt);
+    if (shape.sides !== tint.n) Object.assign(tint, { prev: tint.t > 0.5 ? tint.n : tint.prev, n: shape.sides, t: 0 });
+    tint.t = Math.min(tint.t + dt / 1.2, 1);
     const k = slowTime > 0 ? SLOW_FACTOR : 1;
+    const born = [];
     for (const b of balls) {
       b.trail.unshift([b.x, b.y]);
       while (b.trail.length > trailLen()) b.trail.pop();
@@ -2621,7 +2814,17 @@
         b.color = PALETTE[b.ci];
         burst(b.x, b.y, b.color, 8, 160); sfx.play('switch');
       }
+      if (b.splitAt && Math.hypot(b.x, b.y) < b.splitAt) {
+        // The split: the first goes on as it was, the second slows to land a beat later.
+        b.splitAt = 0; b.kind = null;
+        const d = Math.hypot(b.x, b.y), a = Math.atan2(b.y, b.x), sp = Math.hypot(b.vx, b.vy);
+        const t1 = (d - shape.catchDistance(a, b.ci)) / sp;
+        const v2 = (d - shape.catchDistance(a, b.twinCi)) / (t1 + b.twinGap);
+        born.push({ kind: null, ci: b.twinCi, color: PALETTE[b.twinCi], x: b.x, y: b.y, vx: b.vx / sp * v2, vy: b.vy / sp * v2, trail: [] });
+        burst(b.x, b.y, PALETTE[b.twinCi], 8, 160); sfx.play('switch');
+      }
     }
+    balls.push(...born);
     updateFx(dt);
 
     if (versus.sent && (versus.sent.time -= dt) <= 0) versus.sent = null;
@@ -2658,8 +2861,13 @@
       if (hint && (hint.time -= dt) <= 0) hint = null;
       if (hintNext && !hint && !milestone && !comboLost && bannerTime <= 0) { hint = hintNext; hintNext = null; }
       if (slowTime > 0 && (slowTime -= dt) <= 0) { slowTime = 0; music.setSlow(false); }
-      if (balls.length >= maxBalls()) spawnTimer = Math.max(spawnTimer, 0.4);
-      else if (spawnTimer <= 0) { spawnBall(); spawnTimer = spawnInterval(); }
+      if (rush && rush.warn > 0) rush.warn -= dt * k; // the lane lights up first
+      else if (balls.length >= (rush ? 5 : maxBalls())) spawnTimer = Math.max(spawnTimer, 0.4);
+      else if (spawnTimer <= 0) {
+        // Twins count as two balls, so the pace (and the server's limit) holds.
+        const nb = spawnBall();
+        spawnTimer = (rush ? rushGap() : spawnInterval()) * (nb.kind === 'twins' ? 2 : 1);
+      }
       checkHits();
       if (mode === 'versus' && state === STATE.PLAYING) {
         const before = Math.ceil(clock);
@@ -2702,6 +2910,7 @@
   // background gradient with its faint rings, and the combo glow in each color.
   // Both are blurry by nature, so a quarter of the resolution looks the same.
   const layerCache = new Map();
+  const tint = { n: 3, prev: 3, t: 1 };
   function cachedLayer(key, paint) {
     const k = `${key}|${Math.round(W)}x${Math.round(H)}`;
     let c = layerCache.get(k);
@@ -2725,17 +2934,36 @@
       if (splash) return; // the opening has only the stars
       for (let i = 0; i < 6; i++) { x.beginPath(); x.arc(W / 2, H / 2, 150 + i * 35, 0, TAU); x.fillStyle = 'rgba(255,255,255,0.012)'; x.fill(); }
     }), 0, 0, W, H);
+    if ([STATE.PLAYING, STATE.PAUSED, STATE.GAME_OVER].includes(state)) {
+      // Each figure brings its own light: the color of its newest side, cross-fading.
+      const glow = (n, a) => {
+        if (a <= 0) return;
+        const c = PALETTE[n - 1];
+        ctx.globalAlpha = a;
+        ctx.drawImage(cachedLayer(`tint${n}`, x => {
+          const g = x.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.hypot(W, H) * 0.55);
+          g.addColorStop(0, rgba(c, 0.16)); g.addColorStop(0.55, rgba(c, 0.06)); g.addColorStop(1, rgba(c, 0));
+          x.fillStyle = g; x.fillRect(0, 0, W, H);
+        }), 0, 0, W, H);
+        ctx.globalAlpha = 1;
+      };
+      glow(tint.prev, 1 - tint.t); glow(tint.n, tint.t);
+    }
     for (const d of dots) circle(d.x, d.y, d.r, `rgba(255,255,255,${0.04 + d.r * 0.03})`);
     if (splash) return;
     ctx.save();
     ctx.setLineDash([10, 10]); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    for (const [dx, dy] of SPAWN_DIRS) {
+    SPAWN_DIRS.forEach(([dx, dy], i) => {
       const far = Math.abs(dx) * W / 2 + Math.abs(dy) * H / 2;
       ctx.beginPath();
       ctx.moveTo(worldX + dx * 195, worldY + dy * 195);
       ctx.lineTo(worldX + dx * far, worldY + dy * far);
-      ctx.stroke();
-    }
+      if (rush && rush.dir === i && state === STATE.PLAYING) {
+        // The rush's lane: blinking while it's announced, then lit.
+        const on = rush.warn > 0 ? 0.25 + 0.45 * (Math.sin(time * 18) > 0) : 0.35;
+        ctx.save(); ctx.setLineDash([]); ctx.lineWidth = 6; ctx.strokeStyle = rgba(PALETTE[2], on); ctx.stroke(); ctx.restore();
+      } else ctx.stroke();
+    });
     ctx.restore();
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.1)';
     const segs = 24;
@@ -2799,6 +3027,11 @@
     } else if (b.kind === 'slow') {
       ctx.moveTo(x - s, y - s); ctx.lineTo(x + s, y - s); ctx.lineTo(x - s, y + s); ctx.lineTo(x + s, y + s);
       ctx.closePath(); ctx.fill();
+    } else if (b.kind === 'twins') {
+      // Two dots: white, and the color of the twin to come.
+      circle(x - s * 0.6, y, s * 0.55, 'rgba(255,255,255,0.95)');
+      circle(x + s * 0.6, y, s * 0.55, rgba(PALETTE[b.twinCi]));
+      ctx.beginPath(); ctx.arc(x + s * 0.6, y, s * 0.55, 0, TAU); ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 1.5; ctx.stroke();
     } else if (b.kind === 'chameleon' && b.switchAt) {
       // Dashes spinning around it until it changes color.
       ctx.save();
@@ -3032,6 +3265,8 @@
     ctx.beginPath(); ctx.moveTo(cx - 9, cy - 20); ctx.lineTo(cx - 3, cy - 8); ctx.moveTo(cx + 9, cy - 20); ctx.lineTo(cx + 3, cy - 8); ctx.stroke();
     circle(cx, cy + 3, 12, col);
     drawSymbol('star', cx, cy + 3, 8, rgba(BG_TOP));
+    // New missions today, not looked at yet.
+    if (missionsRec.seen !== today() && missionsLeft()) circle(cx + 18, cy - 20, 8, rgba(PALETTE[2]));
   }
   // Two people; a red dot when a friend beat you or played your duel.
   function drawFriendsIcon(r, dot) {
@@ -3209,7 +3444,10 @@
   let lookRects = [];
   function pickLook(o) {
     const reward = `${o.kind}:${o.id}`;
-    if (!isUnlocked(reward)) { sfx.play('click'); showToast(tr('locked', awardName(reward))); return; }
+    if (!isUnlocked(reward)) {
+      const star = STAR_REWARDS.find(([, r]) => r === reward);
+      sfx.play('click'); showToast(star ? tr('locked_stars', star[0]) : tr('locked', awardName(reward))); return;
+    }
     look[o.kind] = o.id;
     saveJSON(LOOK_KEY, look);
     if (o.kind === 'theme') applyTheme();
@@ -3226,6 +3464,30 @@
     centered(tr('awards'), H * 0.1, 60, WHITE);
     centered(tr('awards_count', got, AWARDS.length), H * 0.1 + 40, 20, WHITE, 0.5);
     let y = H * 0.1 + 120;
+    // Today's missions, with the stars and what they unlock next.
+    centered(tr('missions'), y, 26, PALETTE[2]);
+    y += 30;
+    for (const [kind, n] of missionsToday()) {
+      const done = !!missionsRec.done[kind], have = Math.min(missionsRec.prog[kind] || 0, n);
+      ctx.fillStyle = done ? rgba(PALETTE[3], 0.16) : 'rgba(255,255,255,0.05)';
+      roundRect({ x: 40, y, w: W - 80, h: 70 }, 16); ctx.fill();
+      circle(82, y + 35, 20, done ? rgba(PALETTE[3]) : 'rgba(255,255,255,0.12)');
+      if (done) drawSymbol('star', 82, y + 35, 12, rgba(INK));
+      text(118, y + 44, TEXT[lang].mission_list[kind].replace('%d', n), 21, WHITE, done ? 0.7 : 1);
+      text(W - 62, y + 44, done ? '✓' : `${have}/${n}`, 20, done ? PALETTE[3] : WHITE, 0.8, 'right');
+      if (!done && n > 1) {
+        ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(118, y + 56, W - 240, 4);
+        ctx.fillStyle = rgba(PALETTE[2]); ctx.fillRect(118, y + 56, (W - 240) * have / n, 4);
+      }
+      y += 80;
+    }
+    const next = STAR_REWARDS.find(([n]) => missionsRec.stars < n);
+    const starLine = `${missionsRec.stars}  ·  ${next ? tr('stars_next', next[0], rewardName(next[1])) : tr('stars_all')}`;
+    ctx.font = `800 18px ${FONT}`;
+    const sw = ctx.measureText(starLine).width;
+    drawSymbol('star', W / 2 - sw / 2 - 6, y + 20, 10, rgba(PALETTE[2]));
+    text(W / 2 + 12, y + 26, starLine, 18, WHITE, 0.6, 'center');
+    y += 110;
     const swatch = (cx, cy, kind, id, paint) => {
       const open = isUnlocked(`${kind}:${id}`), on = look[kind] === id;
       ctx.globalAlpha = open ? 1 : 0.35;
@@ -3235,20 +3497,20 @@
       ctx.strokeStyle = on ? rgba(PALETTE[2]) : 'rgba(255,255,255,0.2)'; ctx.lineWidth = on ? 5 : 2; ctx.stroke();
       if (!open) drawLock(cx, cy);
       text(cx, cy + 70, TEXT[lang][kind === 'theme' ? 'themes' : 'trails'][id], 16, on ? PALETTE[2] : WHITE, open ? 0.85 : 0.35, 'center');
-      lookRects.push({ r: { x: cx - 60, y: cy - 50, w: 120, h: 130 }, kind, id });
+      lookRects.push({ r: { x: cx - 52, y: cy - 50, w: 104, h: 130 }, kind, id });
     };
     centered(tr('theme'), y, 26, PALETTE[2]);
     y += 76;
-    THEMES.forEach((th, i) => swatch(W / 2 - 225 + (i % 4) * 150, y + Math.floor(i / 4) * 140, 'theme', th.id, (cx, cy) => {
+    THEMES.forEach((th, i) => swatch(W / 2 - 260 + (i % 5) * 130, y + Math.floor(i / 5) * 140, 'theme', th.id, (cx, cy) => {
       const g = ctx.createLinearGradient(0, cy - 42, 0, cy + 42);
       g.addColorStop(0, th.top); g.addColorStop(1, th.bottom);
       ctx.beginPath(); ctx.arc(cx, cy, 42, 0, TAU); ctx.fillStyle = g; ctx.fill();
       [0, 1, 2].forEach(k => circle(cx - 14 + k * 14, cy + 4, 5, rgba(PALETTE[k * 2])));
     }));
-    y += 140 + 110;
+    y += (Math.ceil(THEMES.length / 5) - 1) * 140 + 150;
     centered(tr('trail'), y, 26, PALETTE[2]);
     y += 76;
-    TRAILS.forEach((id, i) => swatch(W / 2 - 256 + i * 128, y, 'trail', id, (cx, cy) => {
+    TRAILS.forEach((id, i) => swatch(W / 2 - 270 + i * 108, y, 'trail', id, (cx, cy) => {
       circle(cx, cy, 42, 'rgba(255,255,255,0.06)');
       const len = id === 'comet' ? 10 : 6;
       for (let k = len - 1; k >= 0; k--) trailPiece(id, cx + 16 - (k + 1) * 5, cy, k, len, PALETTE[1], 8);
