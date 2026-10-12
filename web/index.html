@@ -52,7 +52,7 @@
                   FRIENDS: 9, DUEL: 10, VERSUS: 11 };
   const SPLASH_TIME = 3.3; // the opening: the logo builds itself, the title, the author
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
-  const VERSION = '2.0';
+  const VERSION = '2.0.1';
   // Hits in a row for x2, x3 and x4. A miss starts the count again.
   const COMBO_STEPS = [10, 25, 50];
   const JOLLY_POINTS = 3, SLOW_TIME = 5, SLOW_FACTOR = 0.5;
@@ -160,6 +160,7 @@
       "vs_wait_result": "Aspetto %s…  %d",
       "vs_left": "%s si è disconnesso",
       "vs_forfeit": "%s ha lasciato la partita",
+      "vs_you_left": "Sei uscito dalla partita",
       "vs_offline": "Connessione persa",
       "rematch": "RIVINCITA",
       "rematch_wait": "ASPETTO…",
@@ -416,6 +417,7 @@
       "vs_wait_result": "Waiting for %s…  %d",
       "vs_left": "%s disconnected",
       "vs_forfeit": "%s left the game",
+      "vs_you_left": "You left the game",
       "vs_offline": "Connection lost",
       "rematch": "REMATCH",
       "rematch_wait": "WAITING…",
@@ -903,27 +905,15 @@
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       try { this.ctx = new AC(); } catch { return; }
-      const buf = samples => {
-        const fade = Math.min(Math.floor(0.005 * RATE), samples.length);
-        for (let i = samples.length - fade; i < samples.length; i++) samples[i] *= (samples.length - 1 - i) / fade;
-        const b = this.ctx.createBuffer(1, samples.length, RATE);
-        b.getChannelData(0).set(samples.map(v => clamp(v, -1, 1)));
+      // The samples are normally ready by now (rendered during the opening).
+      renderSamples(Infinity);
+      const buf = key => {
+        const s = SAMPLES.get(key), b = this.ctx.createBuffer(1, s.length, RATE);
+        b.getChannelData(0).set(s);
         return b;
       };
-      this.buffers.turn_left = buf(blip(540, 400, 0.06, 0.02, 0.3));
-      this.buffers.turn_right = buf(blip(640, 480, 0.06, 0.02, 0.3));
-      this.buffers.click = buf(blip(900, 600, 0.05, 0.015, 0.25));
-      this.buffers.miss = buf(buzz(170, 60, 0.32, 0.12, 0.45));
-      this.buffers.level = buf(arp([659.25, 783.99, 1046.5], 0.08, 0.3, 0.1, 0.3, 0.3));
-      this.buffers.combo = buf(arp([783.99, 1046.5, 1318.51, 1567.98], 0.05, 0.25, 0.08, 0.26, 0.3));
-      this.buffers.milestone = buf(arp([1046.5, 1318.51, 1567.98, 2093], 0.04, 0.22, 0.08, 0.22, 0.3));
-      this.buffers.lost = buf(arp([659.25, 523.25, 392, 293.66], 0.07, 0.3, 0.1, 0.26, 0.5));
-      this.buffers.power = buf(arp([1046.5, 1567.98, 2093], 0.04, 0.3, 0.1, 0.22, 0.2));
-      this.buffers.switch = buf(blip(700, 1200, 0.08, 0.03, 0.22));
-      this.buffers.soft = buf(blip(330, 220, 0.18, 0.07, 0.22)); // a miss in Zen
-      this.buffers.figure = buf(arp([523.25, 659.25, 783.99, 1046.5, 1318.51], 0.07, 0.35, 0.12, 0.28, 0.3));
-      this.buffers.game_over = buf(arp([392, 311.13, 261.63, 196], 0.16, 0.4, 0.18, 0.35, 0.5));
-      this.chimes = PENTA.map(f => buf(blip(f, f, 0.35, 0.12, 0.35, 0.3)));
+      for (const name of SFX_NAMES) this.buffers[name] = buf(name);
+      this.chimes = PENTA.map((f, i) => buf(`chime${i}`));
       music.init(this.ctx, buf);
     },
     playBuffer(b) {
@@ -1078,17 +1068,14 @@
       this.layers = this.targets.map(() => {
         const g = ctx.createGain(); g.gain.value = 0; g.connect(this.out); return g;
       });
-      const b = this.b = { pad: CHORDS.map(c => buf(padChord(c))), bass: {}, arp: {}, lead: {} };
-      for (const r of ROOTS) for (const m of [r, r + 12])
-        b.bass[m] = buf(tone(midiFreq(m), 0.4, 0.005, 0.18, m === r ? 0.32 : 0.28, [1, 0.5, 0.25]));
+      const b = this.b = { pad: CHORDS.map((c, i) => buf(`pad${i}`)), bass: {}, arp: {}, lead: {} };
+      for (const r of ROOTS) for (const m of [r, r + 12]) b.bass[m] = buf(`bass${m}`);
       for (let bar = 0; bar < BARS; bar++) for (let s = 0; s < STEPS_PER_BAR; s++) {
         const m = arpNote(bar, s);
-        b.arp[m] ||= buf(tone(midiFreq(m), 0.3, 0.002, 0.07, 0.1, [1, 0.3]));
+        b.arp[m] ||= buf(`arp${m}`);
       }
-      for (const m of Object.values(LEAD)) b.lead[m] ||= buf(leadNote(midiFreq(m)));
-      b.kick = buf(sweep(150, 45, 0.25, 0.12, 0.5));
-      b.hat = buf(noise(0.05, 0.015, 0.07, true));
-      b.clap = buf(noise(0.15, 0.05, 0.12, false));
+      for (const m of Object.values(LEAD)) b.lead[m] ||= buf(`lead${m}`);
+      b.kick = buf('kick'); b.hat = buf('hat'); b.clap = buf('clap');
       this.applyLayers(); this.updateMaster();
       this.nextTime = ctx.currentTime + 0.05;
       setInterval(() => this.tick(), 25);
@@ -1151,6 +1138,63 @@
       src.buffer = buffer; src.connect(this.layers[layer]); src.start(when);
     },
   };
+
+  // Every sound and note as raw samples, which need no AudioContext: rendered a
+  // few at a time while the opening plays, so the first tap (which has to
+  // create the audio) doesn't stall for a quarter of a second.
+  const SFX = {
+    turn_left: () => blip(540, 400, 0.06, 0.02, 0.3),
+    turn_right: () => blip(640, 480, 0.06, 0.02, 0.3),
+    click: () => blip(900, 600, 0.05, 0.015, 0.25),
+    miss: () => buzz(170, 60, 0.32, 0.12, 0.45),
+    level: () => arp([659.25, 783.99, 1046.5], 0.08, 0.3, 0.1, 0.3, 0.3),
+    combo: () => arp([783.99, 1046.5, 1318.51, 1567.98], 0.05, 0.25, 0.08, 0.26, 0.3),
+    milestone: () => arp([1046.5, 1318.51, 1567.98, 2093], 0.04, 0.22, 0.08, 0.22, 0.3),
+    lost: () => arp([659.25, 523.25, 392, 293.66], 0.07, 0.3, 0.1, 0.26, 0.5),
+    power: () => arp([1046.5, 1567.98, 2093], 0.04, 0.3, 0.1, 0.22, 0.2),
+    switch: () => blip(700, 1200, 0.08, 0.03, 0.22),
+    soft: () => blip(330, 220, 0.18, 0.07, 0.22), // a miss in Zen
+    figure: () => arp([523.25, 659.25, 783.99, 1046.5, 1318.51], 0.07, 0.35, 0.12, 0.28, 0.3),
+    game_over: () => arp([392, 311.13, 261.63, 196], 0.16, 0.4, 0.18, 0.35, 0.5),
+  };
+  const SFX_NAMES = Object.keys(SFX);
+  const SAMPLES = new Map();
+  let sampleJobs = null;
+  function makeSampleJobs() {
+    const jobs = Object.entries(SFX);
+    PENTA.forEach((f, i) => jobs.push([`chime${i}`, () => blip(f, f, 0.35, 0.12, 0.35, 0.3)]));
+    CHORDS.forEach((c, i) => jobs.push([`pad${i}`, () => padChord(c)]));
+    for (const r of ROOTS) for (const m of [r, r + 12])
+      jobs.push([`bass${m}`, () => tone(midiFreq(m), 0.4, 0.005, 0.18, m === r ? 0.32 : 0.28, [1, 0.5, 0.25])]);
+    const arps = new Set();
+    for (let bar = 0; bar < BARS; bar++) for (let s = 0; s < STEPS_PER_BAR; s++) arps.add(arpNote(bar, s));
+    for (const m of arps) jobs.push([`arp${m}`, () => tone(midiFreq(m), 0.3, 0.002, 0.07, 0.1, [1, 0.3])]);
+    for (const m of new Set(Object.values(LEAD))) jobs.push([`lead${m}`, () => leadNote(midiFreq(m))]);
+    jobs.push(['kick', () => sweep(150, 45, 0.25, 0.12, 0.5)], ['hat', () => noise(0.05, 0.015, 0.07, true)],
+      ['clap', () => noise(0.15, 0.05, 0.12, false)]);
+    return jobs;
+  }
+  // Renders for about budgetMs; true when everything is ready. A short fade-out
+  // and a clamp to [-1, 1], in place.
+  function renderSamples(budgetMs) {
+    sampleJobs ||= makeSampleJobs();
+    const end = performance.now() + budgetMs;
+    while (sampleJobs.length && performance.now() < end) {
+      const [key, make] = sampleJobs.shift(), s = make(), fade = Math.min(Math.floor(0.005 * RATE), s.length);
+      for (let i = s.length - fade; i < s.length; i++) s[i] *= (s.length - 1 - i) / fade;
+      for (let i = 0; i < s.length; i++) s[i] = s[i] > 1 ? 1 : s[i] < -1 ? -1 : s[i];
+      SAMPLES.set(key, s);
+    }
+    return !sampleJobs.length;
+  }
+  (function prepareSamples() { if (!renderSamples(6)) setTimeout(prepareSamples, 20); })();
+
+  // A request that gets no answer in 8 s is given up (a network that is "there"
+  // but doesn't answer would otherwise leave the queues stuck).
+  function fetchT(url, opts, ms = 8000) {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
+    return fetch(url, { ...opts, signal: ctl.signal }).finally(() => clearTimeout(timer));
+  }
 
   // --- Leaderboard ----------------------------------------------------------
   // Online on claude.ai: one document per player, scores/<user id> =
@@ -1362,7 +1406,7 @@
   async function refreshGlobal() {
     if (!net.player) return;
     try {
-      const res = await fetch(`${SCORES_URL}?player=${net.player}`);
+      const res = await fetchT(`${SCORES_URL}?player=${net.player}`);
       if (res.ok) applyGlobal(await res.json());
     } catch {} // offline: the local board stays
   }
@@ -1382,7 +1426,7 @@
     net.busy = true; net.nameDirty = false;
     let retry = false, offline = false;
     try {
-      const res = await fetch(SCORES_URL, {
+      const res = await fetchT(SCORES_URL, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ player: net.player, name: playerName, ...(game || { score: 0, level: 1, hits: 0, duration: 0 }) }),
       });
@@ -1484,7 +1528,7 @@
     } else if (rb.status === 'idle') rb.status = 'loading';
     if (!net.player) { rb.status = 'offline'; return; }
     try {
-      const res = await fetch(`${API_URL}/${rb.kind}?${query}player=${net.player}`);
+      const res = await fetchT(`${API_URL}/${rb.kind}?${query}player=${net.player}`);
       if (res.ok) applyRemote(rb, await res.json()); else if (rb.status !== 'ok') rb.status = 'offline';
     } catch { if (rb.status !== 'ok') rb.status = 'offline'; }
   }
@@ -1504,7 +1548,7 @@
     rb.busy = true;
     let retry = false, offline = false;
     try {
-      const res = await fetch(`${API_URL}/${rb.kind}`, {
+      const res = await fetchT(`${API_URL}/${rb.kind}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ player: net.player, name: playerName, ...game }),
       });
@@ -1535,7 +1579,7 @@
   const formatCode = c => c ? `${c.slice(0, 4)}-${c.slice(4)}` : '';
   const playUrl = query => `https://${SHARE_URL}/play/?${query}`;
   async function api(path, body) {
-    const res = await fetch(`${API_URL}/${path}`, body ? {
+    const res = await fetchT(`${API_URL}/${path}`, body ? {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player: net.player, ...body }),
     } : undefined);
     const data = await res.json().catch(() => ({}));
@@ -1620,7 +1664,7 @@
   const versus = {
     room: '', ws: null, phase: 'idle', // idle | waiting | countdown | playing | over
     you: 0, names: [], opp: null, start: null, result: null, rematch: false, oppRematch: false,
-    sendT: 0, retries: 0, beat: 0,
+    sendT: 0, retries: 0, beat: 0, pingT: 0, lastMsg: 0, warned: false,
     turbo: 0, cham: 0, spin: 0, spinT: 0, sent: null, // attacks received, and the last one sent
   };
   const oppName = () => versus.names[1 - versus.you] || tr('vs_friend');
@@ -1645,7 +1689,8 @@
     try { ws = new WebSocket(`${API_URL.replace(/^http/, 'ws')}/versus/${versus.room}/ws?player=${net.player}&name=${encodeURIComponent(playerName)}`); }
     catch { showToast(tr('vs_offline')); return; }
     versus.ws = ws;
-    ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch { return; } versusMessage(m); };
+    versus.lastMsg = Date.now();
+    ws.onmessage = e => { versus.lastMsg = Date.now(); let m; try { m = JSON.parse(e.data); } catch { return; } versusMessage(m); };
     ws.onclose = () => {
       if (versus.ws !== ws) return;
       versus.ws = null;
@@ -1659,11 +1704,24 @@
     Object.assign(versus, { ws: null, room: '', phase: 'idle' });
     if (ws) { try { ws.close(); } catch {} }
   }
+  // Back from the background (or the network): reconnect at once if the socket
+  // is gone, or has been silent too long to trust.
+  function versusWake() {
+    if (!versus.room || versus.phase === 'idle') return;
+    const ws = versus.ws, silent = Date.now() - versus.lastMsg > 15000;
+    if (ws && ws.readyState === 1 && !silent) return;
+    if (ws && ws.readyState === 0 && !silent) return;
+    versus.ws = null; versus.retries = 0;
+    if (ws) { try { ws.close(); } catch {} }
+    connectVersus();
+  }
   function versusMessage(m) {
     if (m.t === 'joined') {
       versus.you = m.you; versus.names = m.names; versus.retries = 0;
       if (m.opp) versus.opp = { ...blankOpp(), ...m.opp };
       if (m.phase === 'playing' && m.seed) versusStart(m, true);
+      // The match ended while this phone was away: the room keeps the verdict.
+      if (m.phase === 'over' && m.result && (!versus.result || versus.phase !== 'over')) versusMessage(m.result);
     } else if (m.t === 'opponent') {
       versus.names[1 - versus.you] = m.name; versus.opp = blankOpp(); sfx.play('power'); haptic('medium');
     } else if (m.t === 'start') versusStart(m, false);
@@ -1682,7 +1740,7 @@
   // Both phones start at the same moment: the room's time, corrected for this clock.
   function versusStart(m, rejoin) {
     versus.start = { seed: m.seed, at: m.at - (m.now - Date.now()), duration: m.duration };
-    if (!rejoin) Object.assign(versus, { result: null, rematch: false, oppRematch: false, opp: blankOpp() });
+    if (!rejoin) Object.assign(versus, { result: null, rematch: false, oppRematch: false, opp: blankOpp(), warned: false });
     if (rejoin && mode === 'versus' && state === STATE.PLAYING) return; // back after a drop: carry on
     if (Date.now() >= versus.start.at) { versus.phase = 'playing'; start('versus'); }
     else { versus.phase = 'countdown'; state = STATE.VERSUS; versus.beat = 0; }
@@ -2407,9 +2465,16 @@
   }
   // Hidden tabs throttle timers: suspend audio instead of letting the music stutter.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { onLeave(); sfx.ctx?.suspend(); } else sfx.ctx?.resume();
+    if (document.hidden) { onLeave(); sfx.ctx?.suspend(); } else { sfx.ctx?.resume(); versusWake(); }
   });
   window.addEventListener('blur', onLeave);
+  // Back online: send what's waiting and refresh the boards.
+  window.addEventListener('online', () => {
+    if (board.status === 'ready') return;
+    syncGlobal(); refreshGlobal();
+    for (const rb of Object.values(modeBoards)) { syncRemote(rb); refreshRemote(rb); }
+    refreshSocial(); versusWake();
+  });
 
   // --- Mobile app -------------------------------------------------------------
   // Inside the app's WebView (mobile/App.js) links open in the phone's browser,
@@ -2425,7 +2490,7 @@
     // An invite or duel link that opened the app (colorspin://…).
     link(url) { if (state === STATE.SPLASH) linkQueue.push(url); else handleLink(url); },
     background() { onLeave(); sfx.ctx?.suspend(); },
-    foreground() { sfx.ctx?.resume(); },
+    foreground() { sfx.ctx?.resume(); versusWake(); },
     // Back works like Esc, except that on the main menu it closes the app.
     back() {
       if (nameShown && document.activeElement === nameInput) nameInput.blur();
@@ -2441,9 +2506,13 @@
     W = aw / scale; H = ah / scale;
     // Keep a portrait playfield on wide desktop windows.
     if (W > H * 0.75) W = H * 0.75;
-    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    // 2x at most: the game is flat shapes, and a 3x phone screen would draw
+    // over twice the pixels (heat and battery) for no visible gain.
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.style.width = `${W * scale}px`; canvas.style.height = `${H * scale}px`;
-    canvas.width = Math.round(W * scale * dpr); canvas.height = Math.round(H * scale * dpr);
+    const cw = Math.round(W * scale * dpr), ch = Math.round(H * scale * dpr);
+    // Resizing the canvas reallocates it: only when the size really changed.
+    if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
   }
   new ResizeObserver(resize).observe(document.body);
   resize();
@@ -2498,6 +2567,14 @@
     updateFx(dt);
 
     if (versus.sent && (versus.sent.time -= dt) <= 0) versus.sent = null;
+    if (versus.ws && versus.ws.readyState === 1) {
+      // Heartbeat: a ping every 5 s; nothing heard for 15 s means a dead socket.
+      if ((versus.pingT -= dt) <= 0) { versus.pingT = 5; vsSend({ t: 'ping' }); }
+      if (Date.now() - versus.lastMsg > 15000) versusWake();
+    }
+    if (mode === 'versus' && state === STATE.GAME_OVER && !versus.result && gameOverTime > 12 && !versus.warned) {
+      versus.warned = true; showToast(tr('vs_offline'));
+    }
     if (state === STATE.VERSUS && versus.phase === 'countdown' && versus.start) {
       // 3, 2, 1, go: a beep for each.
       const left = versus.start.at - Date.now(), n = Math.ceil(left / 1000);
@@ -2560,13 +2637,35 @@
     ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fillStyle = fill; ctx.fill();
   }
 
+  // Soft full-screen layers drawn once into small canvases and stretched: the
+  // background gradient with its faint rings, and the combo glow in each color.
+  // Both are blurry by nature, so a quarter of the resolution looks the same.
+  const layerCache = new Map();
+  function cachedLayer(key, paint) {
+    const k = `${key}|${Math.round(W)}x${Math.round(H)}`;
+    let c = layerCache.get(k);
+    if (!c) {
+      if (layerCache.size > 24) layerCache.clear();
+      c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(W / 4)); c.height = Math.max(1, Math.round(H / 4));
+      const x = c.getContext('2d');
+      x.scale(c.width / W, c.height / H);
+      paint(x);
+      layerCache.set(k, c);
+    }
+    return c;
+  }
   function drawBackground() {
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, rgba(BG_TOP)); g.addColorStop(1, rgba(BG_BOTTOM));
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const splash = state === STATE.SPLASH;
+    ctx.drawImage(cachedLayer(`bg${rgba(BG_TOP)}${rgba(BG_BOTTOM)}${splash}`, x => {
+      const g = x.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, rgba(BG_TOP)); g.addColorStop(1, rgba(BG_BOTTOM));
+      x.fillStyle = g; x.fillRect(0, 0, W, H);
+      if (splash) return; // the opening has only the stars
+      for (let i = 0; i < 6; i++) { x.beginPath(); x.arc(W / 2, H / 2, 150 + i * 35, 0, TAU); x.fillStyle = 'rgba(255,255,255,0.012)'; x.fill(); }
+    }), 0, 0, W, H);
     for (const d of dots) circle(d.x, d.y, d.r, `rgba(255,255,255,${0.04 + d.r * 0.03})`);
-    if (state === STATE.SPLASH) return; // the opening has only the stars
-    for (let i = 0; i < 6; i++) circle(worldX, worldY, 150 + i * 35, 'rgba(255,255,255,0.012)');
+    if (splash) return;
     ctx.save();
     ctx.setLineDash([10, 10]); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     for (const [dx, dy] of SPAWN_DIRS) {
@@ -3389,9 +3488,13 @@
       // The edges of the screen glow in the multiplier's color; x4 runs through the palette.
       const c = m >= 4 ? PALETTE[Math.floor(time * 6) % PALETTE.length] : hex(COMBO_COLORS[m]);
       const a = [0, 0, 0.13, 0.19, 0.26][m] * (reducedMotion ? 1 : 0.8 + 0.2 * Math.sin(time * 5));
-      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.hypot(W, H) * 0.56);
-      g.addColorStop(0, rgba(c, 0)); g.addColorStop(1, rgba(c, a));
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = a;
+      ctx.drawImage(cachedLayer(`glow${rgba(c)}`, x => {
+        const g = x.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.hypot(W, H) * 0.56);
+        g.addColorStop(0, rgba(c, 0)); g.addColorStop(1, rgba(c, 1));
+        x.fillStyle = g; x.fillRect(0, 0, W, H);
+      }), 0, 0, W, H);
+      ctx.globalAlpha = 1;
     }
     if (milestone && state === STATE.PLAYING) {
       const t = milestone.t, grow = 1 + 0.4 * easeOut(1 - t);
@@ -3490,7 +3593,7 @@
       centered(String(r ? r.scores[you] : score), H * 0.41 + slide, 130, WHITE, t);
       const line = r ? tr('duel_score', r.scores[you], opp, r.scores[1 - you] ?? 0) : tr('vs_wait_result', opp, versus.opp ? versus.opp.score : 0);
       centered(line, H * 0.41 + 50 + slide, 24, WHITE, 0.7 * t);
-      if (r && r.reason === 'left') centered(tr('vs_forfeit', r.winner === you ? opp : tr('vs_friend')), H * 0.41 + 90 + slide, 20, WHITE, 0.55 * t);
+      if (r && r.reason === 'left') centered(r.winner === you ? tr('vs_forfeit', opp) : tr('vs_you_left'), H * 0.41 + 90 + slide, 20, WHITE, 0.55 * t);
       else if (r && versus.oppRematch && !versus.rematch) centered(tr('rematch_asked', opp), H * 0.41 + 90 + slide, 22, hex(MODE_COLORS.versus), t);
       drawGameOverButtons();
       return;
@@ -3574,14 +3677,18 @@
     if (fade > 0) { ctx.fillStyle = rgba(BG_BOTTOM, fade); ctx.fillRect(0, 0, W, H); }
   }
 
+  // 60 frames a second at most: a 120 Hz screen would otherwise draw every
+  // frame twice for the same game (and twice the heat).
+  const MIN_FRAME_MS = 10.5;
   let last = performance.now();
   function frame(now) {
+    requestAnimationFrame(frame);
+    if (now - last < MIN_FRAME_MS) return;
     // Clamp the step so a hidden tab or a hiccup doesn't teleport the balls.
     const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
     update(dt);
     draw();
-    requestAnimationFrame(frame);
   }
 
   applyLanguage();

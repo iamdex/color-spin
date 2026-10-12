@@ -8,11 +8,12 @@
 // winner: the higher score.
 //
 // Messages from a phone:  { t: 'state', score, lives, streak, level }
-//                         { t: 'attack', kind }   { t: 'rematch' }
+//                         { t: 'attack', kind }   { t: 'rematch' }   { t: 'ping' }
 // Messages from the room: { t: 'joined', you, names, phase, …start }  { t: 'opponent', name }
 //                         { t: 'start', seed, at, now, duration }      { t: 'state', … }
 //                         { t: 'attack', kind }  { t: 'left' }  { t: 'back' }  { t: 'rematch' }
-//                         { t: 'result', winner, scores, names, reason }
+//                         { t: 'result', winner, scores, names, reason }  { t: 'pong' }
+// A phone that comes back after the end gets the result with 'joined'.
 
 const DURATION = 120;          // seconds of play
 const COUNTDOWN = 3500;        // ms between "start" and the first ball
@@ -29,6 +30,7 @@ export class Match {
     this.seats = [];      // { player, name, ws, score, lives, streak, level, rematch, lastAttack }
     this.phase = 'waiting'; // waiting | playing | over
     this.start = null;
+    this.result = null;   // the last verdict, for a phone that missed it
   }
 
   duration() { return Number(this.env.VERSUS_SECONDS) || DURATION; }
@@ -64,6 +66,7 @@ export class Match {
     const opp = this.other(seat);
     this.send(seat, { t: 'joined', you: this.seats.indexOf(seat), names: this.seats.map(s => s.name), phase: this.phase,
       ...(this.phase === 'playing' ? { ...this.start, now: Date.now() } : {}),
+      ...(this.phase === 'over' && this.result ? { result: this.result } : {}),
       ...(opp ? { opp: { score: opp.score, lives: opp.lives, streak: opp.streak, level: opp.level, connected: !!opp.ws } } : {}) });
     if (opp) this.send(opp, { t: this.phase === 'playing' ? 'back' : 'opponent', name: seat.name });
     if (this.phase === 'waiting' && this.seats.length === 2 && this.seats.every(s => s.ws)) await this.begin();
@@ -72,6 +75,7 @@ export class Match {
 
   async begin() {
     this.phase = 'playing';
+    this.result = null;
     const seed = Array.from(crypto.getRandomValues(new Uint8Array(10)), b => SEED_CHARS[b % SEED_CHARS.length]).join('');
     this.start = { t: 'start', seed, at: Date.now() + COUNTDOWN, duration: this.duration() };
     for (const s of this.seats) Object.assign(s, { score: 0, lives: LIVES, streak: 0, level: 1, rematch: false, lastAttack: 0 });
@@ -88,6 +92,8 @@ export class Match {
     let msg;
     try { msg = JSON.parse(data); } catch { return; }
     const opp = this.other(seat);
+    // The phone's heartbeat: it uses any message to know the connection is alive.
+    if (msg.t === 'ping') { this.send(seat, { t: 'pong' }); return; }
     if (msg.t === 'state' && this.phase === 'playing') {
       const int = (v, max) => Number.isInteger(v) && v >= 0 && v <= max ? v : null;
       seat.score = int(msg.score, 100000) ?? seat.score;
@@ -134,6 +140,7 @@ export class Match {
     if (quitter) winner = this.seats.indexOf(this.other(quitter));
     else if (b && a.score !== b.score) winner = a.score > b.score ? 0 : 1;
     const msg = { t: 'result', winner, scores, names: this.seats.map(s => s.name), reason };
+    this.result = msg;
     for (const s of this.seats) this.send(s, msg);
     this.ctx.storage.deleteAlarm();
   }
