@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Color Spin — ruota, abbina, non fermarti più</title>
-<meta name="description" content="Color Spin è un gioco di riflessi a colori: ruota la figura e abbina ogni pallina al lato del suo colore. Combo, palline speciali, quattro modalità, una sfida nuova ogni giorno e classifica mondiale. Gratis.">
+<meta name="description" content="Color Spin è un gioco di riflessi a colori: ruota la figura e abbina ogni pallina al lato del suo colore. Combo, palline a tempo di musica, quattro modalità, duelli e versus dal vivo con gli amici, una sfida e tre missioni nuove ogni giorno, classifica mondiale. Gratis.">
 <meta name="theme-color" content="#08080f">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Color Spin">
-<meta property="og:description" content="Ruota la figura, abbina i colori, non fermarti più. Gratis nel browser, presto su Android e iOS.">
+<meta property="og:description" content="Ruota la figura, abbina i colori, sfida i tuoi amici. Gratis nel browser, presto su Android e iOS.">
 <meta property="og:image" content="https://color-spin.espertini.com/assets/og-image.jpg">
 <meta property="og:url" content="https://color-spin.espertini.com/">
 <meta name="twitter:card" content="summary_large_image">
@@ -118,7 +118,10 @@
   .g3 { grid-template-columns: repeat(3, 1fr); }
   .g4 { grid-template-columns: repeat(4, 1fr); }
   @media (max-width: 980px) { .g4 { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 760px) { .g3, .g4 { grid-template-columns: 1fr; } }
+  .g5 { grid-template-columns: repeat(5, 1fr); }
+  .g5 .card { padding-inline: 22px; }
+  @media (max-width: 1180px) { .g5 { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 760px) { .g3, .g4, .g5 { grid-template-columns: 1fr; } }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; position: relative; overflow: hidden; isolation: isolate;
           transition: transform 0.3s, border-color 0.3s, background 0.3s; }
   .card:hover { transform: translateY(-4px); border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); }
@@ -165,6 +168,18 @@
   .ball.cham { animation: cham 3s steps(1) infinite; }
   @keyframes cham { 0% { background: var(--blue); } 33% { background: var(--green); } 66% { background: var(--orange); } }
   .ball.cham svg { animation: spin 3s linear infinite; }
+  .ball.twins { background: var(--purple); display: flex; justify-content: center; gap: 6px; }
+  .ball.twins span { width: 16px; height: 16px; border-radius: 50%; background: #fff; animation: twins 2.4s ease-in-out infinite; }
+  .ball.twins span + span { background: var(--orange); box-shadow: 0 0 0 2px #fff; animation-direction: reverse; }
+  @keyframes twins { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(var(--tw, 3px)); } }
+
+  /* --- Rhythm: a step sequencer lighting up on the beat --- */
+  .beat { background: var(--panel); border: 1px solid var(--line); border-radius: 32px; padding: clamp(24px, 4vw, 44px); }
+  .beat-row { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; }
+  .beat-row + .beat-row { margin-top: 10px; }
+  .beat-row i { aspect-ratio: 1; border-radius: 30%; background: var(--off); animation: step 2.4s steps(1) infinite; }
+  @keyframes step { 0%, 12.5% { background: var(--c); box-shadow: 0 0 22px var(--c); transform: scale(1.06); } 12.6%, 100% { background: var(--off); box-shadow: none; transform: none; } }
+  .beat-cap { display: flex; justify-content: space-between; margin-top: 18px; color: var(--muted); font-weight: 800; font-size: 0.82rem; letter-spacing: 0.1em; text-transform: uppercase; }
 
   /* --- Modes --- */
   .mode-card h3 { font-size: 1.5rem; }
@@ -181,8 +196,9 @@
   .chip.today { background: var(--purple); color: var(--ink); border-color: transparent; }
 
   /* --- Trophies --- */
-  .swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 14px; margin-top: 40px; }
-  @media (max-width: 760px) { .swatches { grid-template-columns: repeat(4, 1fr); } }
+  .swatches { display: grid; grid-template-columns: repeat(9, 1fr); gap: 14px; margin-top: 40px; }
+  @media (max-width: 980px) { .swatches { grid-template-columns: repeat(5, 1fr); } }
+  @media (max-width: 420px) { .swatches { grid-template-columns: repeat(3, 1fr); } }
   .swatch { text-align: center; font-weight: 800; font-size: 0.78rem; color: var(--muted); letter-spacing: 0.06em; }
   .swatch i { display: block; aspect-ratio: 1; border-radius: 50%; margin: 0 auto 10px; width: 100%; max-width: 92px; border: 2px solid rgba(255,255,255,0.18);
               position: relative; transition: transform 0.3s; }
@@ -248,10 +264,10 @@
     .strip .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; }
     .stat { flex-direction: column; align-items: center; gap: 0; text-align: center; font-size: 0.85rem; }
     /* Rows of cards become carousels to swipe; the next card peeks in. */
-    .grid.g3, .grid.g4 { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 14px;
+    .grid.g3, .grid.g4, .grid.g5 { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 14px;
                          margin-inline: -16px; padding: 6px 16px 22px; scroll-padding-inline: 16px; scrollbar-width: none; }
-    .grid.g3::-webkit-scrollbar, .grid.g4::-webkit-scrollbar { display: none; }
-    .grid.g3 > .card, .grid.g4 > .card { flex: 0 0 82%; scroll-snap-align: start; }
+    .grid.g3::-webkit-scrollbar, .grid.g4::-webkit-scrollbar, .grid.g5::-webkit-scrollbar { display: none; }
+    .grid.g3 > .card, .grid.g4 > .card, .grid.g5 > .card { flex: 0 0 82%; scroll-snap-align: start; }
     .grid .card.reveal { opacity: 1; transform: none; } /* off-screen sideways, so never "seen" */
     .swipe { display: flex; justify-content: center; gap: 7px; margin-top: 2px; }
     .swipe i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.22); transition: all 0.3s; }
@@ -293,6 +309,7 @@
     <nav class="nav-links" aria-label="Sezioni">
       <a href="#how" data-i18n="nav_how">Come si gioca</a>
       <a href="#modes" data-i18n="nav_modes">Modalità</a>
+      <a href="#friends" data-i18n="nav_friends">Amici</a>
       <a href="#daily" data-i18n="nav_daily">Sfida del giorno</a>
       <a href="#trophies" data-i18n="nav_trophies">Trofei</a>
       <a href="#ranks" data-i18n="nav_ranks">Classifica</a>
@@ -339,8 +356,8 @@
   <div class="strip">
     <div class="wrap">
       <div class="stat"><b>8</b><span data-i18n="stat_colors">colori</span></div>
-      <div class="stat"><b>4</b><span data-i18n="stat_modes">modalità</span></div>
-      <div class="stat"><b>1</b><span data-i18n="stat_daily">sfida nuova ogni giorno</span></div>
+      <div class="stat"><b>4</b><span data-i18n="stat_modes">modalità, più il versus</span></div>
+      <div class="stat"><b>1+3</b><span data-i18n="stat_daily">sfida e missioni nuove ogni giorno</span></div>
       <div class="stat"><b>11</b><span data-i18n="stat_trophies">trofei da vincere</span></div>
     </div>
   </div>
@@ -400,6 +417,27 @@
     </div>
   </section>
 
+  <!-- Rhythm -->
+  <section id="rhythm">
+    <div class="wrap split rev">
+      <div>
+        <span class="kicker reveal" data-i18n="rh_kicker">A tempo di musica</span>
+        <h2 class="reveal d1" data-i18n="rh_title">Ogni pallina cade sul battito.</h2>
+        <p class="lead reveal d2" data-i18n="rh_lead">Le palline toccano la figura a tempo con la colonna sonora: non reagisci soltanto, suoni. E più sali, più la musica cresce.</p>
+        <ul class="bullets reveal d3">
+          <li><span class="dot" style="background:var(--yellow)"></span><span data-i18n="rh_b1"><b>Raffiche:</b> dopo l'ottagono una corsia si accende e arriva una fila di palline. Poi, un respiro.</span></li>
+          <li><span class="dot" style="background:var(--cyan)"></span><span data-i18n="rh_b2"><b>All'ultimo!</b> Giri proprio un istante prima del colpo e salvi la pallina? Punto in più.</span></li>
+          <li><span class="dot" style="background:var(--red)"></span><span data-i18n="rh_b3"><b>Ultima vita:</b> il bordo pulsa come un cuore e la musica si fa ovattata.</span></li>
+        </ul>
+      </div>
+      <div class="beat reveal d2" aria-hidden="true">
+        <div class="beat-row" id="beat1"></div>
+        <div class="beat-row" id="beat2"></div>
+        <div class="beat-cap"><span>1</span><span>2</span><span>3</span><span>4</span></div>
+      </div>
+    </div>
+  </section>
+
   <!-- Special balls -->
   <section>
     <div class="wrap">
@@ -408,7 +446,7 @@
         <h2 class="reveal d1" data-i18n="spec_title">Ogni livello ha una sorpresa.</h2>
         <p class="lead reveal d2" data-i18n="spec_lead">Man mano che sali arrivano palline speciali, riconoscibili dall'anello bianco che pulsa. Dopo l'ottagono il gioco continua a cambiare.</p>
       </div>
-      <div class="grid g4">
+      <div class="grid g5">
         <article class="card reveal">
           <div class="ball" style="background:var(--red)"><svg><use href="#i-heart"/></svg></div>
           <h3 data-i18n="spec1_t">Cuore</h3>
@@ -432,6 +470,12 @@
           <h3 data-i18n="spec4_t">Camaleonte</h3>
           <p data-i18n="spec4_p">Cambia colore quando ormai è vicino. Hai 0,7 secondi per rimediare.</p>
           <span class="tag" data-i18n="spec4_tag">Dal livello 16</span>
+        </article>
+        <article class="card reveal d3">
+          <div class="ball twins"><span></span><span></span></div>
+          <h3 data-i18n="spec5_t">Gemelle</h3>
+          <p data-i18n="spec5_p">A metà strada si divide in due: un colore, poi un altro, un battito dopo.</p>
+          <span class="tag" data-i18n="spec5_tag">Dal livello 20</span>
         </article>
       </div>
     </div>
@@ -470,6 +514,34 @@
     </div>
   </section>
 
+  <!-- Friends -->
+  <section id="friends">
+    <div class="wrap">
+      <div class="center">
+        <span class="kicker reveal" data-i18n="fr_kicker">Con gli amici</span>
+        <h2 class="reveal d1" data-i18n="fr_title">Sfida chi conosci. Anche dal vivo.</h2>
+        <p class="lead reveal d2" data-i18n="fr_lead">Niente account: mandi un link o un codice e siete amici. Da lì, ogni partita può diventare una sfida.</p>
+      </div>
+      <div class="grid g3">
+        <article class="card mode-card reveal">
+          <div class="mode-icon" style="background:var(--green)"><svg viewBox="0 0 24 24"><circle cx="8.5" cy="8" r="3.5" fill="#12121c"/><circle cx="16.5" cy="9" r="2.8" fill="#12121c" opacity=".7"/><path d="M2 20a6.5 6.5 0 0 1 13 0zM13.5 20a5 5 0 0 1 9 0z" fill="#12121c"/></svg></div>
+          <h3 data-i18n="fr1_t">Amici</h3>
+          <p data-i18n="fr1_p">La vostra classifica, chi ha giocato la sfida di oggi e un avviso quando qualcuno batte il tuo record.</p>
+        </article>
+        <article class="card mode-card reveal d1">
+          <div class="mode-icon" style="background:var(--blue)"><svg viewBox="0 0 24 24" fill="none" stroke="#12121c" stroke-width="2.6" stroke-linecap="round"><path d="M5 19L19 5M5 5l14 14M3 15l6 6M15 21l6-6"/></svg></div>
+          <h3 data-i18n="fr2_t">Duelli</h3>
+          <p data-i18n="fr2_p">Mandi la tua partita: l'amico gioca le stesse palline contro il tuo "fantasma", secondo per secondo.</p>
+        </article>
+        <article class="card mode-card reveal d2">
+          <div class="mode-icon" style="background:var(--orange)"><svg viewBox="0 0 24 24" fill="none" stroke="#12121c" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h8M8 4l4 4-4 4M21 16h-8M16 12l-4 4 4 4"/></svg></div>
+          <h3 data-i18n="fr3_t">Versus dal vivo</h3>
+          <p data-i18n="fr3_p">Due minuti, stesso ritmo, punteggi in diretta. Le tue combo mandano attacchi: palline turbo, camaleonti, la sua figura che gira da sola.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
   <!-- Daily challenge -->
   <section id="daily">
     <div class="wrap split">
@@ -495,9 +567,9 @@
   <section id="trophies">
     <div class="wrap">
       <div class="center">
-        <span class="kicker reveal" data-i18n="tr_kicker">Trofei, temi e scie</span>
+        <span class="kicker reveal" data-i18n="tr_kicker">Trofei, missioni, temi e scie</span>
         <h2 class="reveal d1" data-i18n="tr_title">Più giochi, più si colora.</h2>
-        <p class="lead reveal d2" data-i18n="tr_lead">Undici trofei da conquistare. Ognuno sblocca un nuovo tema di sfondo o una scia per le palline, da scegliere quando vuoi.</p>
+        <p class="lead reveal d2" data-i18n="tr_lead">Undici trofei da conquistare e tre missioni nuove ogni giorno. I trofei sbloccano temi di sfondo e scie per le palline; le stelle delle missioni ne sbloccano altri due.</p>
       </div>
       <div class="swatches reveal" id="swatches"></div>
       <div class="split" style="margin-top:56px;align-items:start">
@@ -532,7 +604,7 @@
       <div class="center">
         <span class="kicker reveal" data-i18n="rk_kicker">Classifica mondiale</span>
         <h2 class="reveal d1" data-i18n="rk_title">Chi sta girando più forte?</h2>
-        <p class="lead reveal d2" data-i18n="rk_lead">Una classifica per ogni modalità e una per la sfida di oggi. Questi sono i migliori in questo momento.</p>
+        <p class="lead reveal d2" data-i18n="rk_lead">Una classifica per ogni modalità, una per la sfida di oggi e una tutta vostra tra amici. Questi sono i migliori in questo momento.</p>
       </div>
       <div class="boards">
         <div class="board reveal"><h3><span data-i18n="rk_all">Classica · di sempre</span><span class="live">LIVE</span></h3><div id="boardAll"></div></div>
@@ -547,7 +619,7 @@
       <div>
         <span class="kicker reveal" data-i18n="code_kicker">Fatto a mano</span>
         <h2 class="reveal d1" data-i18n="code_title">Ogni forma, ogni suono, ogni nota: tutto dal codice.</h2>
-        <p class="lead reveal d2" data-i18n="code_lead">Niente immagini e niente file audio. La grafica, gli effetti e la colonna sonora sono generati mentre giochi, e la musica aggiunge uno strumento a ogni nuova figura. Leggero, veloce, e funziona anche offline.</p>
+        <p class="lead reveal d2" data-i18n="code_lead">Niente immagini e niente file audio. La grafica, gli effetti e la colonna sonora sono generati mentre giochi, e la musica aggiunge uno strumento a ogni nuova figura, e le palline cadono a tempo. Leggero, veloce, e funziona anche offline.</p>
       </div>
       <div class="reveal d2" aria-hidden="true">
         <div class="eq" id="eq"></div>
@@ -596,45 +668,56 @@
 
   // English texts; the Italian ones are the page itself.
   const EN = {
-    nav_how: 'How to play', nav_modes: 'Modes', nav_daily: 'Daily challenge', nav_trophies: 'Awards', nav_ranks: 'Leaderboard',
+    nav_how: 'How to play', nav_modes: 'Modes', nav_friends: 'Friends', nav_daily: 'Daily challenge', nav_trophies: 'Awards', nav_ranks: 'Leaderboard',
     play_short: 'Play', play_now: 'Play now in your browser',
     hero_kicker: 'The color reflex game',
     hero_lead: 'Spin the shape and match every ball to the side of its color. Easy to learn, impossible to put down.',
     hero_fine: 'Free · No sign-up · English and Italian',
-    stat_colors: 'colors', stat_modes: 'modes', stat_daily: 'new challenge every day', stat_trophies: 'awards to win',
+    stat_colors: 'colors', stat_modes: 'modes, plus versus', stat_daily: 'new challenge and missions every day', stat_trophies: 'awards to win',
     how_kicker: 'How to play', how_title: 'One tap. One color. One more.', how_lead: 'It takes ten seconds to get it. Then you can’t stop.',
     how1_t: 'Tap left or right', how1_p: 'The shape turns one side at a time. On a computer use the arrow keys, or A and D.',
     how2_t: 'Match the colors', how2_p: 'Every ball has to hit the side of its color. Miss one and you lose a life: you have five.',
     how3_t: 'Watch the shape grow', how3_p: 'Every 10 balls you level up. Every 3 levels the shape gains a side and gives you a life back: from the triangle all the way to the octagon.',
     combo_kicker: 'Combos', combo_title: 'Hits in a row, points multiplied.', combo_label: 'Combo',
     combo_lead: 'Ten hits in a row and your points double. Twenty-five and they triple. Fifty and you’re at x4. One miss and you start over: that’s where your heart starts racing.',
+    rh_kicker: 'On the beat', rh_title: 'Every ball lands on the beat.',
+    rh_lead: 'The balls hit the shape in time with the soundtrack: you don’t just react, you play along. And the higher you climb, the bigger the music gets.',
+    rh_b1: '<b>Rushes:</b> past the octagon a lane lights up and a string of balls comes down it. Then, a breather.',
+    rh_b2: '<b>Clutch!</b> Turn a split second before the hit and save the ball? One more point.',
+    rh_b3: '<b>Last life:</b> the edges throb like a heartbeat and the music goes muffled.',
     spec_kicker: 'Special balls', spec_title: 'Every level has a surprise.',
     spec_lead: 'As you climb, special balls show up, marked by a pulsing white ring. Past the octagon the game keeps changing.',
     spec1_t: 'Heart', spec1_p: 'Catch it on its color and win back a life.', spec1_tag: 'From level 4',
     spec2_t: 'Rainbow', spec2_p: 'Fits any side and is worth three times the points.', spec2_tag: 'From level 8',
     spec3_t: 'Hourglass', spec3_p: 'Five seconds of slow motion: even the music slows down.', spec3_tag: 'From level 10',
     spec4_t: 'Chameleon', spec4_p: 'Changes color when it’s almost there. You get 0.7 seconds to react.', spec4_tag: 'From level 16',
+    spec5_t: 'Twins', spec5_p: 'Splits in two halfway: one color, then another, a beat later.', spec5_tag: 'From level 20',
     modes_kicker: 'Four modes', modes_title: 'Relax, or put your reflexes to the test.', modes_lead: 'Pick how to play with the arrows next to the PLAY button.',
     m1_t: 'Classic', m1_p: 'Five lives and the whole journey, from the triangle to the octagon. How far can you go?',
     m2_t: '60 seconds', m2_p: 'As many points as you can in one minute. A miss costs 3 seconds, a heart gives you 5.',
     m3_t: 'Zen', m3_p: 'No lives and no rush. Just colors, shapes and music, to clear your head.',
     m4_t: 'Hardcore', m4_p: 'One life, a fast pace from the start and no hearts. For the tough ones only.',
+    fr_kicker: 'With friends', fr_title: 'Challenge people you know. Live, too.',
+    fr_lead: 'No accounts: send a link or a code and you’re friends. From there, any game can become a challenge.',
+    fr1_t: 'Friends', fr1_p: 'Your own leaderboard, who played today’s challenge, and a heads-up when someone beats your best.',
+    fr2_t: 'Duels', fr2_p: 'Send your game: your friend plays the same balls against your “ghost”, second by second.',
+    fr3_t: 'Live versus', fr3_p: 'Two minutes, same pace, scores live. Your combos send attacks: turbo balls, chameleons, their shape spinning on its own.',
     daily_kicker: 'Daily challenge', daily_title: 'A new game every day. The same for everyone.',
     daily_lead: 'At midnight a new sequence of balls arrives, the same for every player in the world, with a special rule. Luck doesn’t win: the best player does.',
     daily_b1: '<b>Unlimited tries:</b> your best one counts.',
     daily_b2: '<b>Days in a row:</b> come back every day and keep your streak alive.',
     daily_b3: '<b>Share:</b> a picture ready for WhatsApp and Instagram, with your score and rank.',
     daily_badge: 'Ready to share',
-    tr_kicker: 'Awards, themes and trails', tr_title: 'The more you play, the more colorful it gets.',
-    tr_lead: 'Eleven awards to win. Each one unlocks a new background theme or a trail for the balls, to pick whenever you like.',
+    tr_kicker: 'Awards, missions, themes and trails', tr_title: 'The more you play, the more colorful it gets.',
+    tr_lead: 'Eleven awards to win and three new missions every day. Awards unlock background themes and ball trails; mission stars unlock two more.',
     tr_trails: 'Ball trails', tr_list: 'Some of the awards',
     acc_kicker: 'For everyone', acc_title: 'Made for colorblind players too.',
     acc_lead: 'Turn on symbols in the settings: every color gets its own shape, on the figure and inside the balls. So you match the shape, not just the color.',
     rk_kicker: 'World leaderboard', rk_title: 'Who’s spinning fastest?',
-    rk_lead: 'A leaderboard for each mode and one for today’s challenge. These are the best right now.',
+    rk_lead: 'A leaderboard for each mode, one for today’s challenge and one just for you and your friends. These are the best right now.',
     rk_all: 'Classic · all time', rk_today: 'Today’s challenge',
     code_kicker: 'Handmade', code_title: 'Every shape, every sound, every note: all from code.',
-    code_lead: 'No images and no audio files. The graphics, the effects and the soundtrack are generated as you play, and the music adds an instrument with every new shape. Light, fast, and it works offline too.',
+    code_lead: 'No images and no audio files. The graphics, the effects and the soundtrack are generated as you play, and the music adds an instrument with every new shape, and the balls land on the beat. Light, fast, and it works offline too.',
     final_kicker: 'Ready?', final_title: 'The first spin is free. So are all the others.',
     final_lead: 'Play right now in your browser, on your phone or computer. The Android and iPhone app is coming soon.',
     foot_by: 'A game by Davide Dex Espertini', foot_privacy: 'Privacy',
@@ -644,10 +727,10 @@
     it: {
       soon: 'Presto su', get: 'Scarica su', play_store: 'Google Play', app_store: 'App Store',
       twists: ["Pioggia d'arcobaleno", 'Giorno dei camaleonti', 'Turbo', 'Tempo sospeso', 'Tre vite', 'Classica'],
-      today: 'Oggi', themes: ['Notte', 'Oceano', 'Foresta', 'Tramonto', 'Neon', 'Zen', 'Brace', 'Oro'],
-      trails: ['Classica', 'Cometa', 'Scintille', 'Stelle', 'Arcobaleno'],
+      today: 'Oggi', themes: ['Notte', 'Oceano', 'Foresta', 'Tramonto', 'Neon', 'Zen', 'Brace', 'Oro', 'Aurora'],
+      trails: ['Classica', 'Cometa', 'Scintille', 'Stelle', 'Arcobaleno', 'Fuoco'],
       trophies: [['Ottagono', 'Arriva al livello 16'], ['Combo x4', '50 palline giuste di fila'], ['Fulmine', '60 punti in 60 secondi'],
-                 ['Pace interiore', '100 palline in Zen'], ['Duro a morire', 'Livello 7 in Hardcore'], ['Settimana perfetta', 'La sfida 7 giorni di fila']],
+                 ['Pace interiore', '100 palline in Zen'], ['Duro a morire', 'Livello 7 in Hardcore'], ['Settimana perfetta', 'La sfida 7 giorni di fila'], ['Missioni del giorno', 'Tre al giorno: ogni stella conta']],
       level: 'liv.', player: 'Giocatore', loading: 'Caricamento…', offline: 'Classifica non raggiungibile in questo momento.',
       empty_all: 'Ancora nessun punteggio: sii il primo!', empty_daily: 'Nessuno ha ancora giocato la sfida di oggi. Tocca a te!',
       daily_title: n => `Sfida #${n} di oggi`, video: 'Video di una partita a Color Spin',
@@ -658,10 +741,10 @@
     en: {
       soon: 'Coming to', get: 'Get it on', play_store: 'Google Play', app_store: 'App Store',
       twists: ['Rainbow rain', 'Chameleon day', 'Turbo', 'Frozen time', 'Three lives', 'Classic'],
-      today: 'Today', themes: ['Night', 'Ocean', 'Forest', 'Sunset', 'Neon', 'Zen', 'Ember', 'Gold'],
-      trails: ['Classic', 'Comet', 'Sparkle', 'Stars', 'Rainbow'],
+      today: 'Today', themes: ['Night', 'Ocean', 'Forest', 'Sunset', 'Neon', 'Zen', 'Ember', 'Gold', 'Aurora'],
+      trails: ['Classic', 'Comet', 'Sparkle', 'Stars', 'Rainbow', 'Fire'],
       trophies: [['Octagon', 'Reach level 16'], ['Combo x4', '50 hits in a row'], ['Lightning', '60 points in 60 seconds'],
-                 ['Inner peace', '100 balls in Zen'], ['Die hard', 'Level 7 in Hardcore'], ['Perfect week', 'The challenge 7 days in a row']],
+                 ['Inner peace', '100 balls in Zen'], ['Die hard', 'Level 7 in Hardcore'], ['Perfect week', 'The challenge 7 days in a row'], ['Daily missions', 'Three a day: every star counts']],
       level: 'lv.', player: 'Player', loading: 'Loading…', offline: 'The leaderboard can’t be reached right now.',
       empty_all: 'No scores yet: be the first!', empty_daily: 'Nobody has played today’s challenge yet. Your turn!',
       daily_title: n => `Today’s challenge #${n}`, video: 'Video of a Color Spin game',
@@ -671,7 +754,7 @@
     },
   };
   const THEMES = [['#1c1638', '#08080f'], ['#0b2a4a', '#040a14'], ['#0f2e22', '#030a06'], ['#3d1733', '#0d0510'],
-                  ['#2a0b45', '#06020f'], ['#1c2e36', '#081014'], ['#3d130c', '#0c0402'], ['#33270d', '#0b0803']];
+                  ['#2a0b45', '#06020f'], ['#1c2e36', '#081014'], ['#3d130c', '#0c0402'], ['#33270d', '#0b0803'], ['#0c3b36', '#12072a']];
 
   // --- Daily challenge (same rules as the game) ---
   function today() {
@@ -769,7 +852,7 @@
   }
 
   // --- Carousels (phones): dots that follow the swipe ---
-  for (const grid of document.querySelectorAll('.grid.g3, .grid.g4')) {
+  for (const grid of document.querySelectorAll('.grid.g3, .grid.g4, .grid.g5')) {
     const cards = [...grid.children], dots = document.createElement('div');
     dots.className = 'swipe'; dots.setAttribute('aria-hidden', 'true');
     dots.innerHTML = cards.map(() => '<i></i>').join('');
@@ -811,6 +894,15 @@
   document.getElementById('eq').innerHTML = Array.from({ length: 24 }, (_, i) =>
     `<i style="background:${COLORS[i % 8]};animation-delay:${(-(i * 0.37) % 1.2).toFixed(2)}s;animation-duration:${(0.9 + (i % 5) * 0.15).toFixed(2)}s"></i>`).join('');
 
+  // --- The rhythm section's sequencer: two rows of eighth notes, lit in turn ---
+  for (const [id, row] of [['beat1', [0, 2, 3, 4, 6]], ['beat2', [0, 1, 2, 3, 4, 5, 6, 7]]]) {
+    document.getElementById(id).innerHTML = Array.from({ length: 8 }, (_, i) => {
+      const on = row.includes(i), c = id === 'beat1' ? COLORS[i % 8] : 'rgba(255,255,255,0.35)';
+      const off = on && id === 'beat1' ? `${c}40` : 'rgba(255,255,255,0.06)';
+      return `<i style="--c:${on ? c : 'rgba(255,255,255,0.06)'};--off:${off};animation-delay:${(i * 0.3 - 2.4).toFixed(1)}s"></i>`;
+    }).join('');
+  }
+
   // --- Trail previews: a ball running across with each trail ---
   function drawTrails(time) {
     for (const c of document.querySelectorAll('canvas[data-trail]')) {
@@ -819,10 +911,12 @@
       const head = ((time / 1400) % 1) * (w + 60) - 20, len = kind === 1 ? 16 : 9, col = COLORS[1];
       for (let i = len; i >= 0; i--) {
         const px = head - i * 7, t = 1 - i / (len + 1);
-        const c2 = kind === 4 ? COLORS[(i + Math.floor(time / 90)) % 8] : col;
+        const c2 = kind === 4 ? COLORS[(i + Math.floor(time / 90)) % 8]
+          : kind === 5 ? (i < len * 0.3 ? COLORS[2] : i < len * 0.65 ? COLORS[5] : COLORS[0]) : col;
         x.globalAlpha = (kind === 1 ? 0.45 : 0.35) * t;
         x.fillStyle = c2;
         if (kind === 3) { if (i % 3 === 1) star(x, px, h / 2, 9 * t + 3); }
+        else if (kind === 5) { x.globalAlpha = 0.5 * t; x.beginPath(); x.arc(px + Math.sin(time / 30 + i * 1.7) * 2, h / 2 + Math.cos(time / 35 + i) * 2, 12 * (0.4 + 0.7 * t), 0, Math.PI * 2); x.fill(); }
         else { x.beginPath(); x.arc(px, h / 2, 12 * (0.3 + 0.6 * t), 0, Math.PI * 2); x.fill(); }
         if (kind === 2 && (i + Math.floor(time / 60)) % 3 === 0) { x.globalAlpha = t; x.fillStyle = '#fff'; x.beginPath(); x.arc(px + (i * 5 % 9 - 4), h / 2 + (i * 7 % 13 - 6), 2.2, 0, Math.PI * 2); x.fill(); }
       }
