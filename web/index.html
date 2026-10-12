@@ -52,7 +52,7 @@
                   FRIENDS: 9, DUEL: 10, VERSUS: 11 };
   const SPLASH_TIME = 3.3; // the opening: the logo builds itself, the title, the author
   const SAVE_KEY = 'color-spin-best', MUTE_KEY = 'color-spin-muted', MUSIC_KEY = 'color-spin-music-muted', NAME_KEY = 'color-spin-name';
-  const VERSION = '2.0.1';
+  const VERSION = '2.1.0';
   // Hits in a row for x2, x3 and x4. A miss starts the count again.
   const COMBO_STEPS = [10, 25, 50];
   const JOLLY_POINTS = 3, SLOW_TIME = 5, SLOW_FACTOR = 0.5;
@@ -284,6 +284,7 @@
       "game_over": "GAME OVER",
       "points_level": "PUNTI  ·  LIVELLO %d  ·  COMBO %d",
       "new_best": "NUOVO RECORD!",
+      "best_gap": "TI MANCAVANO %d PUNTI AL RECORD",
       "rank": "%d° IN CLASSIFICA",
       "replay": "RIGIOCA",
       "menu": "MENU",
@@ -541,6 +542,7 @@
       "game_over": "GAME OVER",
       "points_level": "POINTS  ·  LEVEL %d  ·  COMBO %d",
       "new_best": "NEW BEST!",
+      "best_gap": "%d POINTS SHORT OF YOUR BEST",
       "rank": "RANKED #%d",
       "replay": "PLAY AGAIN",
       "menu": "MENU",
@@ -778,6 +780,7 @@
     setup(n) {
       this.sides = n; this.colors = PALETTE.slice(0, n); this.turns = 0;
       this.tween = null; this.rotation = 0; this.baseAngle = bestBaseAngle(n);
+      this.lit = []; this.show = null;
     },
     // dir: 1 = clockwise (on screen), -1 = counter-clockwise.
     rotateStep(dir = 1) {
@@ -785,11 +788,18 @@
       this.tween = { from: this.rotation, to: this.turns * this.step(), t: 0 };
     },
     pulse() { this.pulseT = 0; },
+    // lit: each side's glow after it catches a ball (or the red of a wrong catch);
+    // show: the side a missed ball wanted, blinking for a moment.
+    lit: [], litColor: [], show: null,
+    light(i, c = WHITE) { this.lit[i] = 1; this.litColor[i] = c; },
+    showSide(i) { this.show = { i, t: 0.75 }; },
     // Points out the side a new shape just gained (the last color).
     highlightNew() { this.hl = 1.8; },
     hl: 0,
     update(dt) {
       this.hl = Math.max(this.hl - dt, 0);
+      for (let i = 0; i < this.lit.length; i++) if (this.lit[i]) this.lit[i] = Math.max(this.lit[i] - dt * 3.5, 0);
+      if (this.show && (this.show.t -= dt) <= 0) this.show = null;
       if (this.tween) {
         const tw = this.tween; tw.t += dt;
         const k = Math.min(tw.t / TURN_TIME, 1);
@@ -843,6 +853,13 @@
         tri(a, b, 1.22); ctx.fillStyle = rgba(this.colors[n - 1], 0.35 * k); ctx.fill();
         tri(a, b, 1); ctx.fillStyle = `rgba(255,255,255,${0.42 * k})`; ctx.fill();
       }
+      for (let i = 0; i < n; i++) {
+        if (!this.lit[i]) continue;
+        // The side that just caught a ball lights up, and its glow spills out.
+        const a = verts[i], b = verts[(i + 1) % n], l = this.lit[i], c = this.litColor[i];
+        tri(a, b, 1 + 0.18 * l); ctx.fillStyle = rgba(c === WHITE ? this.colors[i] : c, 0.3 * l); ctx.fill();
+        tri(a, b, 1); ctx.fillStyle = rgba(c, 0.5 * l); ctx.fill();
+      }
       ctx.lineCap = 'round';
       for (let i = 0; i < n; i++) {
         const a = verts[i], b = verts[(i + 1) % n];
@@ -855,6 +872,14 @@
         ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
         ctx.save(); ctx.shadowColor = '#fff'; ctx.shadowBlur = 24 * k;
         ctx.strokeStyle = `rgba(255,255,255,${0.95 * k})`; ctx.lineWidth = 9; ctx.stroke(); ctx.restore();
+      }
+      if (this.show) {
+        // A missed ball: its side blinks, so the eye learns where it should have gone.
+        const i = this.show.i, a = verts[i], b = verts[(i + 1) % n];
+        const k = Math.sin(this.show.t / 0.75 * Math.PI * 3) > 0 ? 1 : 0.25;
+        ctx.save(); ctx.shadowColor = rgba(this.colors[i]); ctx.shadowBlur = 20;
+        ctx.beginPath(); ctx.moveTo(a[0] * 1.06, a[1] * 1.06); ctx.lineTo(b[0] * 1.06, b[1] * 1.06);
+        ctx.strokeStyle = `rgba(255,255,255,${0.95 * k})`; ctx.lineWidth = 8; ctx.stroke(); ctx.restore();
       }
       ctx.strokeStyle = 'rgba(13,13,23,0.55)'; ctx.lineWidth = 3;
       for (const v of verts) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(v[0], v[1]); ctx.stroke(); }
@@ -1064,7 +1089,9 @@
     // Called once the audio context exists (after the first user gesture).
     init(ctx, buf) {
       this.ctx = ctx;
-      this.out = ctx.createGain(); this.out.gain.value = 0; this.out.connect(ctx.destination);
+      this.out = ctx.createGain(); this.out.gain.value = 0;
+      this.filter = ctx.createBiquadFilter(); this.filter.type = 'lowpass'; this.filter.frequency.value = 20000;
+      this.out.connect(this.filter); this.filter.connect(ctx.destination);
       this.layers = this.targets.map(() => {
         const g = ctx.createGain(); g.gain.value = 0; g.connect(this.out); return g;
       });
@@ -1091,6 +1118,12 @@
     },
     setSlow(on) { this.slow = on; this.bpm = this.gameBpm * (on ? 0.75 : 1); },
     setDucked(on) { this.ducked = on; this.updateMaster(); },
+    // The last life: the music goes muffled, as if heard from under water.
+    danger: false,
+    setDanger(on) {
+      this.danger = on;
+      if (this.filter) this.filter.frequency.setTargetAtTime(on ? 900 : 20000, this.ctx.currentTime, on ? 0.15 : 0.4);
+    },
     // Fades out; the next play* starts again from the first bar.
     stop() { this.playing = false; this.updateMaster(); },
     begin() {
@@ -1923,7 +1956,10 @@
   let gameOverTime = 0, pauseTime = 0, resumeTimer = 0, time = 0, worldX = 0, worldY = 0;
   let streak = 0, arrowFlash = [0, 0], lastRank = 0, lastGameImproved = false, playTime = 0;
   // hits: balls matched (they set the level); score adds the combo and bonus points.
-  let hits = 0, bestStreak = 0, comboPop = 0, slowTime = 0, hint = null;
+  let hits = 0, bestStreak = 0, comboPop = 0, slowTime = 0, hint = null, hintNext = null;
+  // hitStop: the game holds still for an instant on a new multiplier.
+  let hitStop = 0;
+  const HIT_STOP = 0.075;
   // calm: see CALM_BALLS; the rest is combo feedback (flash, zoom kick, every-10 pop, lost combo).
   // gameSeed: classic games are seeded too, so any of them can become a duel;
   // ghostRec: the score at every second of play, the duel's ghost.
@@ -1986,7 +2022,7 @@
     ghostRec = [0];
     balls = []; clearFx();
     score = 0; lives = maxLives; level = 1; newBest = false; spawnTimer = 1;
-    hits = 0; bestStreak = 0; comboPop = 0; slowTime = 0; hint = null;
+    hits = 0; bestStreak = 0; comboPop = 0; slowTime = 0; hint = null; hintNext = null; hitStop = 0;
     calm = 0; comboFlash = 0; kick = 0; milestone = null; comboLost = null;
     streak = 0; lastRank = 0; lastGameImproved = false; playTime = 0;
     state = STATE.PLAYING; fade = 1;
@@ -2058,9 +2094,13 @@
     seen.add(kind);
     try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seen])); } catch {}
     const [title, line] = TEXT[lang].specials[kind];
-    hint = { title, line, time: 3.5 };
+    // Not over a combo text: it waits for it to clear.
+    if (milestone || comboLost || bannerTime > 0.3) hintNext = { title, line, time: 3.5 };
+    else hint = { title, line, time: 3.5 };
   }
   const showBanner = text => { banner = text; bannerTime = 1.2; };
+  // The big combo texts take the middle of the screen: a hint showing there fades out.
+  const quietHint = () => { if (hint) hint.time = Math.min(hint.time, 0.3); };
 
   function spawnBall() {
     // Always four draws per ball, so the daily sequence stays the same for everyone.
@@ -2090,14 +2130,16 @@
       const angle = Math.atan2(b.y, b.x);
       if (Math.hypot(b.x, b.y) - BALL_RADIUS > shape.edgeDistance(angle)) continue;
       b.dead = true;
-      if (b.kind === 'jolly' || shape.sideAt(angle) === b.ci) onScore(b); else onMiss(b);
+      const side = shape.sideAt(angle);
+      if (b.kind === 'jolly' || side === b.ci) onScore(b, side); else onMiss(b, side);
       if (state !== STATE.PLAYING) break;
     }
     balls = balls.filter(b => !b.dead);
   }
 
-  function onScore(b) {
+  function onScore(b, side) {
     const before = multiplier();
+    shape.light(side);
     sfx.chime(streak); streak++; hits++;
     bestStreak = Math.max(bestStreak, streak);
     const mult = multiplier(), points = (b.kind === 'jolly' ? JOLLY_POINTS : 1) * mult;
@@ -2109,6 +2151,7 @@
     if (mult > before) {
       // A new multiplier: banner, a flash and a ring in its color, a kick of the whole board.
       comboPop = 1; sfx.play('combo'); showBanner(tr('banner_combo', mult));
+      hitStop = HIT_STOP; quietHint();
       comboColor = hex(COMBO_COLORS[mult]); comboFlash = 1; kick = 1;
       ring(0, 0, comboColor, 70, 560, 0.7);
       for (const c of shape.colors) burst(0, 0, c, 4, 520);
@@ -2116,7 +2159,7 @@
       sendAttack(ATTACKS[mult - 2]);
     } else if (streak >= 20 && streak % 10 === 0 && !COMBO_STEPS.includes(streak)) {
       // Every 10 more: the count pops over the shape.
-      milestone = { n: streak, t: 1 }; kick = Math.max(kick, 0.5);
+      milestone = { n: streak, t: 1 }; kick = Math.max(kick, 0.5); quietHint();
       sfx.play('milestone'); haptic('medium');
       sendAttack(ATTACKS[Math.random() * ATTACKS.length | 0]);
     } else haptic('light');
@@ -2130,13 +2173,14 @@
     checkAwards();
   }
 
-  function onMiss(b) {
+  function onMiss(b, side) {
     const lost = streak;
     streak = 0;
+    shape.light(side, PALETTE[0]); shape.showSide(b.ci);
     if (mode === 'zen') { burst(b.x, b.y, [0.75, 0.75, 0.8], 8, 150); sfx.play('soft'); return; }
     shake = 14; flash = 1; haptic('heavy');
     // A real combo breaking apart, so it hurts a little.
-    if (lost >= 10) { comboLost = { n: lost, t: 1.4 }; sfx.play('lost'); }
+    if (lost >= 10) { comboLost = { n: lost, t: 1.4 }; sfx.play('lost'); quietHint(); }
     burst(b.x, b.y, [0.75, 0.75, 0.8], 10, 200); ring(b.x, b.y, PALETTE[0], 10, 90);
     if (mode === 'sprint') {
       clock = Math.max(clock - SPRINT_MISS, 0);
@@ -2526,6 +2570,9 @@
       d.y -= (6 + d.r * 8) * dt;
       if (d.y < -10) { d.x = Math.random() * W; d.y = H + 10; }
     }
+    // The last life (when there were more): muffled music and a red heartbeat at the edges.
+    const danger = state === STATE.PLAYING && hasLives() && lives === 1 && maxLives > 1;
+    if (danger !== music.danger) music.setDanger(danger);
     if (state === STATE.PAUSED) { updatePaused(dt); return; }
     shake = Math.max(shake - dt * 30, 0);
     flash = Math.max(flash - dt * 2.5, 0);
@@ -2598,6 +2645,7 @@
       while (ghostRec.length <= Math.floor(playTime) && ghostRec.length < 1800) ghostRec.push(score);
       spawnTimer -= dt * k;
       if (hint && (hint.time -= dt) <= 0) hint = null;
+      if (hintNext && !hint && !milestone && !comboLost && bannerTime <= 0) { hint = hintNext; hintNext = null; }
       if (slowTime > 0 && (slowTime -= dt) <= 0) { slowTime = 0; music.setSlow(false); }
       if (balls.length >= maxBalls()) spawnTimer = Math.max(spawnTimer, 0.4);
       else if (spawnTimer <= 0) { spawnBall(); spawnTimer = spawnInterval(); }
@@ -2618,7 +2666,9 @@
         else if (Math.ceil(clock) < before && clock < 5) sfx.play('click');
       }
     } else {
+      const before = gameOverTime;
       gameOverTime += dt;
+      if (state === STATE.GAME_OVER && newBest && score > 0 && before < 1.05 && gameOverTime >= 1.05) { sfx.play('combo'); haptic('success'); }
     }
   }
 
@@ -3496,6 +3546,17 @@
       }), 0, 0, W, H);
       ctx.globalAlpha = 1;
     }
+    if (music.danger || (state === STATE.PLAYING && hasLives() && lives === 1 && maxLives > 1)) {
+      // Two beats and a rest, like a heart.
+      const p = (time * 1.1) % 1, beat = Math.max(Math.exp(-p * 14), 0.7 * Math.exp(-Math.max(p - 0.18, 0) * 14) * (p > 0.18));
+      ctx.globalAlpha = reducedMotion ? 0.24 : 0.16 + 0.24 * beat;
+      ctx.drawImage(cachedLayer(`glow${rgba(PALETTE[0])}`, x => {
+        const g = x.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.hypot(W, H) * 0.56);
+        g.addColorStop(0, rgba(PALETTE[0], 0)); g.addColorStop(1, rgba(PALETTE[0], 1));
+        x.fillStyle = g; x.fillRect(0, 0, W, H);
+      }), 0, 0, W, H);
+      ctx.globalAlpha = 1;
+    }
     if (milestone && state === STATE.PLAYING) {
       const t = milestone.t, grow = 1 + 0.4 * easeOut(1 - t);
       centered(`${milestone.n}!`, worldY - 250, 96 * grow, PALETTE[2], clamp(t * 2, 0, 1));
@@ -3612,11 +3673,22 @@
     if (mode === 'daily') centered(`${tr('daily', dayNumber(gameDay))}  ·  ${twistText(twist)[0]}`, H * 0.27 - 76 + slide, 24, PALETTE[4], t);
     if (mode === 'sprint' || mode === 'hardcore') iconText(mode, W / 2, H * 0.27 - 76 + slide, tr(`mode_${mode}`), 24, hex(MODE_COLORS[mode]), t);
     centered(tr(mode === 'sprint' ? 'time_up' : 'game_over'), H * 0.27 + slide, 68, PALETTE[0], t);
-    centered(String(score), H * 0.41 + slide, 130, WHITE, t);
+    // The score counts up, and a bar fills toward the record.
+    const up = easeOut(clamp((gameOverTime - 0.15) / 0.9, 0, 1)), shown = Math.round(score * up);
+    centered(String(shown), H * 0.41 + slide, 130 + (newBest && up === 1 ? 10 * Math.max(1 - (gameOverTime - 1.05) * 4, 0) : 0), WHITE, t);
     centered(tr('points_level', level, bestStreak), H * 0.41 + 44 + slide, 22, WHITE, 0.55 * t);
-    const daySide = mode === 'daily';
-    if (newBest) centered(tr(daySide ? 'daily_new_best' : 'new_best'), H * 0.52 + slide, 34 + Math.sin(time * 6) * 3, PALETTE[2], t);
-    else centered(daySide ? tr('daily_best', todayBest()) : tr('best', records[mode] ?? best), H * 0.52 + slide, 26, WHITE, 0.6 * t);
+    const daySide = mode === 'daily', rec = daySide ? todayBest() : records[mode] ?? best;
+    if (rec > 0) {
+      const bw = 360, bx = (W - bw) / 2, by = H * 0.52 - 52 + slide, f = clamp(shown / rec, 0, 1);
+      ctx.globalAlpha = t;
+      roundRect({ x: bx, y: by, w: bw, h: 10 }, 5); ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fill();
+      if (f > 0) { roundRect({ x: bx, y: by, w: Math.max(bw * f, 10), h: 10 }, 5); ctx.fillStyle = rgba(newBest ? PALETTE[2] : WHITE, newBest ? 1 : 0.6); ctx.fill(); }
+      ctx.globalAlpha = 1;
+    }
+    if (newBest && up === 1) centered(tr(daySide ? 'daily_new_best' : 'new_best'), H * 0.52 + slide, 34 + Math.sin(time * 6) * 3, PALETTE[2], t);
+    else if (newBest) { /* shown when the count reaches it */ }
+    else if (score > 0 && score < rec && rec - score <= Math.max(rec * 0.4, 5)) centered(tr('best_gap', rec - score), H * 0.52 + slide, 26, PALETTE[2], 0.85 * t * up);
+    else centered(daySide ? tr('daily_best', rec) : tr('best', rec), H * 0.52 + slide, 26, WHITE, 0.6 * t);
     const rb = modeBoard();
     if (rb) { if (rb.me) centered(rankText(rb), H * 0.52 + 44 + slide, 22, WHITE, 0.7 * t); }
     else if (lastRank > 0) centered(tr('rank', lastRank), H * 0.52 + 44 + slide, 22, WHITE, 0.7 * t);
@@ -3687,7 +3759,8 @@
     // Clamp the step so a hidden tab or a hiccup doesn't teleport the balls.
     const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
-    update(dt);
+    if (hitStop > 0 && state === STATE.PLAYING) hitStop -= dt;
+    else update(dt);
     draw();
   }
 
